@@ -2,9 +2,12 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les versions 1 à 9 étaient des itérations internes ; elles sont résumées dans la 10.0.
 
+## [Non publié]
+
 ## [10.2.0] — 2026-10-01
 
 ### Ajouté
+- Builds de test automatiques à chaque modification de `main` (pré-release GitHub `dev-build`) et archive téléchargeable à chaque exécution de la CI ; `scripts/bump.js` pour changer de version sans oublier un fichier.
 - Dépôt public : tests unitaires et d'intégration (`node:test`), CI GitHub Actions (Windows, Node 24 ; un job parallèle contrôle le zip de release), fabrication de la release, documentation complète.
 - Reprise automatique de ffmpeg après plantage (jusqu'à 3 fois), à la bonne position, avec discontinuité HLS signalée.
 - Élagage des segments déjà vus quand le disque est presque plein (`minFreeGB`, `trimKeepSec`).

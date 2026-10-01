@@ -81,6 +81,10 @@ Optional: `DEMARRAGE-AUTO.bat` starts the bridge with Windows; `PARE-FEU.bat` op
 
 The real-device test protocol and how to send a useful report are in [docs/TESTING.md](docs/TESTING.md).
 
+## Test builds
+
+Every green push to `main` refreshes the **[dev-build pre-release](../../releases/tag/dev-build)**: the very latest code, passed the automated tests but **not yet validated on a real headset**. Prefer the [latest release](../../releases/latest) unless you want to help test.
+
 ## Documentation
 
 | Guide | |
@@ -90,7 +94,7 @@ The real-device test protocol and how to send a useful report are in [docs/TESTI
 | [Configuration](docs/CONFIGURATION.md) | every `config.json` option (generated from the code) |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | symptoms → causes → fixes |
 | [Architecture](docs/ARCHITECTURE.md) · [HTTP endpoints](docs/HTTP-ENDPOINTS.md) · [DeoVR notes](docs/DEOVR-NOTES.md) | how it is built and what DeoVR accepts |
-| [Testing](docs/TESTING.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) | for contributors |
+| [Testing](docs/TESTING.md) · [Maintaining](docs/MAINTAINING.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) | for contributors |
 
 ## Development
 

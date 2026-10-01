@@ -22,5 +22,7 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour s'y retrouver dans `bridg
 
 ## Publier une version (mainteneurs)
 
-1. Mettre à jour `version` dans `package.json`, `VERSION` dans `bridge/lib.js` (ex. `'10.3'`) et `CHANGELOG.md`.
-2. `git tag vX.Y.Z && git push --tags` : le workflow *Release* teste, fabrique le zip et crée la release GitHub.
+1. Décrire les changements dans `CHANGELOG.md`, section *Non publié*, puis `npm run bump -- X.Y.Z` (met à jour `package.json`, `VERSION` dans `bridge/lib.js` et le changelog).
+2. `git tag vX.Y.Z && git push origin vX.Y.Z` : le workflow *Release* teste, fabrique le zip et crée la release GitHub.
+
+Cycle complet, builds de test et réglages du dépôt : [docs/MAINTAINING.md](docs/MAINTAINING.md).

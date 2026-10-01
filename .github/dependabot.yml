@@ -4,3 +4,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:          # une seule pull request par mois pour toutes les actions
+      actions:
+        patterns: ["*"]

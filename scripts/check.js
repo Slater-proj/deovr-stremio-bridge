@@ -21,4 +21,12 @@ for (const f of all.filter(f => /\.(js|md|json|yml|bat)$/.test(f) && !/package-l
   if (/ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(t)) fail(`secret probable dans ${rel(f)}`);
 }
 ok('aucun jeton / clé privée détecté');
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')), lib = fs.readFileSync(path.join(root, 'bridge', 'lib.js'), 'utf8');
+const libV = (/const VERSION = '([^']+)'/.exec(lib) || [])[1], [maj, min] = pkg.version.split('.');
+if (libV !== `${maj}.${min}`) fail(`VERSION de bridge/lib.js (${libV}) ≠ package.json (${pkg.version}) : lancez « npm run bump -- X.Y.Z »`);
+const chg = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+if (!chg.includes(`## [${pkg.version}]`)) fail(`CHANGELOG.md n'a pas de section [${pkg.version}]`);
+ok(`version ${pkg.version} : package.json, lib.js et CHANGELOG.md cohérents`);
+for (const f of all.filter(f => /\.(md|json|yml)$/.test(f) && !/package-lock/.test(f))) if (/\bOWNER\b/.test(fs.readFileSync(f, 'utf8'))) fail(`marque de remplacement « OWNER » oubliée dans ${rel(f)}`);
+ok('aucune marque de remplacement oubliée');
 process.exit(bad ? 1 : 0);

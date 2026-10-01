@@ -31,9 +31,9 @@ jobs:
       - name: Tests unitaires et d'intégration
         run: npm test
 
-  # En parallèle (n'allonge pas la durée) : fabrication du zip et contrôle de son contenu.
+  # En parallèle des tests (n'allonge pas la durée) : fabrique le zip de TEST, contrôle son contenu et le met à disposition.
   archive:
-    name: Archive de release
+    name: Archive de test
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -41,9 +41,54 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: npm run build
+      - name: Build (suffixe de test)
+        run: |
+          echo "BUILD_SUFFIX=-dev.${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          BUILD_SUFFIX="-dev.${{ github.run_number }}.${GITHUB_SHA::7}" npm run build
       - name: Contrôle du contenu de l'archive
         run: |
           unzip -tq dist/*.zip
           if unzip -l dist/*.zip | grep -E 'config\.json$|\.log$|diagnostic-report|rapport-support|bridge-state'; then echo "fichier local dans l'archive" && exit 1; fi
           unzip -p dist/*.zip 'deovr-stremio-bridge/start.bat' | file - | grep -q CRLF
+          unzip -p dist/*.zip 'deovr-stremio-bridge/BUILD-INFO.txt'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deovr-stremio-bridge-dev-${{ github.run_number }}
+          path: dist/*.zip
+          retention-days: 14
+          if-no-files-found: error
+
+  # Uniquement sur main, uniquement si tout est vert : met à jour la pré-release « dev-build » (toujours le dernier build de test).
+  dev-release:
+    name: Pré-release dev-build
+    needs: [tests, archive]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: dev-release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      COMMIT_MSG: ${{ github.event.head_commit.message }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build (suffixe de test)
+        run: BUILD_SUFFIX="-dev.${{ github.run_number }}.${GITHUB_SHA::7}" npm run build
+      - name: Publier la pré-release
+        run: |
+          gh release delete dev-build --cleanup-tag --yes || true
+          {
+            echo "**Build de test automatique** du dernier commit de \`main\` (${GITHUB_SHA::7}). Tests verts, mais **non validé sur un vrai casque**."
+            echo
+            echo "Dernier changement : ${COMMIT_MSG%%$'\n'*}"
+            echo
+            echo "Pour une version stable, prenez la dernière release (pas une pré-release)."
+          } > notes.md
+          gh release create dev-build dist/*.zip --prerelease --target "$GITHUB_SHA" --title "Build de test (main, ${GITHUB_SHA::7})" --notes-file notes.md

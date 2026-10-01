@@ -74,9 +74,13 @@ Les tests automatiques (CI, simulations) couvrent la bibliothèque, la déclarat
 
 **Il faut un vrai casque** pour confirmer : la bascule HLS écran de chargement → film dans DeoVR (tests 5 et 6 de l'onglet « Test pont »), les liens `deovr://` depuis le navigateur de DeoVR (page `/t`), les champs réels de l'API de Stremio selon sa version, l'affichage des accents. Protocole : [docs/TESTING.md](docs/TESTING.md).
 
+## Builds de test
+
+Chaque push vert sur `main` met à jour la **[pré-release dev-build](../../releases/tag/dev-build)** : le code le plus récent, qui a passé les tests automatiques mais **n'est pas encore validé sur un vrai casque**. Préférez la [dernière release](../../releases/latest) sauf si vous voulez aider à tester.
+
 ## Documentation
 
-[Installation](docs/INSTALL.md) · [Utilisation](docs/USAGE.md) · [Configuration](docs/CONFIGURATION.md) · [Dépannage](docs/TROUBLESHOOTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Points d'accès HTTP](docs/HTTP-ENDPOINTS.md) · [Notes DeoVR](docs/DEOVR-NOTES.md) · [Tests](docs/TESTING.md) · [Contribuer](CONTRIBUTING.md) · [Sécurité](SECURITY.md) · [Historique](CHANGELOG.md)
+[Installation](docs/INSTALL.md) · [Utilisation](docs/USAGE.md) · [Configuration](docs/CONFIGURATION.md) · [Dépannage](docs/TROUBLESHOOTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Points d'accès HTTP](docs/HTTP-ENDPOINTS.md) · [Notes DeoVR](docs/DEOVR-NOTES.md) · [Tests](docs/TESTING.md) · [Contribuer](CONTRIBUTING.md) · [Maintenance](docs/MAINTAINING.md) · [Sécurité](SECURITY.md) · [Historique](CHANGELOG.md)
 
 ## Développement
 
