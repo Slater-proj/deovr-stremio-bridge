@@ -1,0 +1,13 @@
+node_modules/
+dist/
+# --- fichiers locaux : ne JAMAIS versionner ---
+config.json
+bridge-*.log
+bridge-*.log.*
+bridge-state.json
+debug.log
+diagnostic-report.*
+rapport-support.txt
+*.tmp
+.DS_Store
+Thumbs.db

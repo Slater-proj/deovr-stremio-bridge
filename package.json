@@ -1,0 +1,33 @@
+{
+  "name": "deovr-stremio-bridge",
+  "version": "10.2.0",
+  "description": "Bridge between the Stremio streaming server and the DeoVR VR video player (Windows / PCVR). Zero dependencies.",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bridge/server.js",
+    "test": "node scripts/run-tests.js",
+    "test:unit": "node scripts/run-tests.js unit",
+    "test:integration": "node scripts/run-tests.js integration",
+    "check": "node scripts/check.js && node scripts/gen-config-doc.js --check",
+    "build": "node scripts/make-release.js",
+    "diagnose": "node bridge/diagnose.js",
+    "docs": "node scripts/gen-config-doc.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Slater-proj/deovr-stremio-bridge.git"
+  },
+  "keywords": [
+    "deovr",
+    "stremio",
+    "vr",
+    "pcvr",
+    "streaming",
+    "torrent",
+    "hls"
+  ]
+}
