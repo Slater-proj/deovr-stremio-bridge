@@ -71,7 +71,7 @@ jobs:
           unzip -l dist/*.zip
           if unzip -l dist/*.zip | grep -E 'config\.json$|\.log$|diagnostic-report|rapport-support|bridge-state'; then echo "fichier local dans l'archive" && exit 1; fi
           unzip -p dist/*.zip 'deovr-stremio-bridge/start.bat' | file - | grep -q CRLF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: deovr-stremio-bridge
           path: dist/*.zip
