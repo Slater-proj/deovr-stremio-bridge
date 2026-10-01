@@ -24,7 +24,17 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - name: Notes de la release (extrait du CHANGELOG)
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          awk -v v="$V" '/^## \[/ { p = (index($0, "[" v "]") > 0); next } p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Voir CHANGELOG.md." > notes.md
+          {
+            echo
+            echo "---"
+            echo "**Installation** : téléchargez le zip ci-dessous, décompressez-le, double-clic sur \`INSTALL.bat\`, puis \`start.bat\`. Voir [docs/INSTALL.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/INSTALL.md)."
+          } >> notes.md
       - name: Créer la release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/*.zip --title "${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.zip --title "DeoVR ⇄ Stremio Bridge ${GITHUB_REF_NAME}" --notes-file notes.md

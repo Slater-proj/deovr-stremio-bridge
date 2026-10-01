@@ -21,7 +21,8 @@ describe('lecture : clic -> écran de chargement -> film', { skip: !HAS_FFMPEG &
     const r = await playHls(url, { seconds: 60 });
     assert.ok(r.loader >= 1, 'segments de chargement vus'); assert.ok(r.real >= 8, 'segments du film vus'); assert.ok(r.ended, 'ENDLIST');
     assert.match(r.lastPlaylist, /#EXT-X-DISCONTINUITY/);
-    assert.ok(Math.abs(sumExtinf(r.lastPlaylist.split('#EXT-X-DISCONTINUITY')[1]) - 60) < 8, 'durée du film conservée');
+    const parts = r.lastPlaylist.split('#EXT-X-DISCONTINUITY'), realSum = sumExtinf(parts.slice(1).join(''));
+    assert.ok(Math.abs(realSum - 60) < 8, `durée du film conservée (attendu ~60 s, obtenu ${realSum.toFixed(1)} s, ${parts.length - 1} discontinuité(s))\n${r.lastPlaylist.slice(0, 1500)}`);
     assert.equal(mocks.created.has(hashOf(1)), true, 'torrent déclaré à Stremio au clic');
     const lib = await bridge.json('/deovr'), enCours = lib.scenes[0];
     assert.equal(enCours.name, 'En cours'); assert.match(enCours.list[0].title, /^\[(PRÊT|EN COURS)/);
