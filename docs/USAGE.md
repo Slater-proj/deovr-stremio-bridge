@@ -1,5 +1,20 @@
 # Utilisation dans DeoVR
 
+## Lancer le pont
+
+Exe portable : double-clic sur `DeoVR-Stremio-Bridge.exe` (Stremio doit tourner). La console affiche version, dossier de données et adresses. Au premier lancement, le navigateur s'ouvre sur la page de connexion `/setup`. Options utiles (`--help` les liste toutes) :
+
+| Option | Effet |
+|---|---|
+| `--dev` (ou `LANCER-MODE-DEV.bat`) | mode développeur : journaux détaillés, sortie d'ffmpeg, page `http://localhost:8080/dev` qui liste tous les points de diagnostic |
+| `--login` / `--logout` | rouvrir la page de connexion / oublier le compte |
+| `--port N`, `--data-dir DIR` | port et dossier de données |
+| `--no-browser` | ne jamais ouvrir le navigateur tout seul |
+| `--report` (ou `RAPPORT-SUPPORT.bat`) | écrit `data\rapport-support.txt` (secrets masqués) |
+| `--diagnose` (ou `DIAGNOSTIC.bat`) | diagnostic complet |
+
+Changer de compte Stremio : `http://localhost:8080/setup` (sur le PC) → *Changer de compte*.
+
 ## Ouvrir la bibliothèque
 
 Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. `http://localhost:8080`). DeoVR demande alors `/deovr` et affiche la bibliothèque native avec ses onglets :
@@ -46,5 +61,5 @@ Taper dans un casque est pénible, mais possible : dans le navigateur de DeoVR, 
 ## Suivi et dépannage rapide
 
 - `http://localhost:8080/status` : films en cours, pairs, débit réel/nécessaire.
-- `http://localhost:8080/debug/downloads` : chronologie complète de chaque clic ; `bridge-bilans.log` : un bilan par film (« lu », « quitté puis repris », « abandonné par DeoVR après N s », « aucune donnée »).
+- `http://localhost:8080/debug/downloads` : chronologie complète de chaque clic ; `data\bridge-bilans.log` : un bilan par film (« lu », « quitté puis repris », « abandonné par DeoVR après N s », « aucune donnée »).
 - Voir [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

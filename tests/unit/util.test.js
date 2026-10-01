@@ -23,9 +23,9 @@ test('torrentQuery : sources de l\'addon + trackers publics', () => {
   assert.ok(q.includes('tr=') || q.includes('tracker'), q);
 });
 
-test('config.example.json : JSON valide, valeurs factices, chaque clé est connue du pont', () => {
+test('config.example.json : JSON valide, aucun identifiant, chaque clé est connue du pont', () => {
   const ex = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'bridge', 'config.example.json'), 'utf8'));
-  assert.match(ex.email, /exemple|example/); assert.match(ex.password, /mot-de-passe|password/);
+  for (const k of ['email', 'password', 'authKey']) assert.ok(!(k in ex), `config.example.json ne doit pas contenir ${k} (connexion via /setup)`);
   const known = Object.keys(L.cfg);
   const aliases = new Set(['email', 'password', 'authKey', 'port', 'dnsMode', 'scanTimeoutMs']);
   for (const k of Object.keys(ex)) assert.ok(known.includes(k) || aliases.has(k), `clé de config.example.json inconnue du pont : ${k}`);

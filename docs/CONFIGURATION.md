@@ -70,3 +70,6 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `dnsMode` | `—` | auto : DNS du PC puis DNS public si échec \| public : DNS public d'abord \| system : DNS du PC seulement |
 | `publicDns` | `['1.1.1.1', '8.8.8.8', '9.9.9.9']` |  |
 | `debug` | `false` | journaux détaillés (aussi : variable d'environnement DEBUG=1) |
+| `dev` | `!!env.BRIDGE_DEV` | mode développeur (--dev) : journaux détaillés, ffmpeg bavard, page /dev |
+| `stremioApi` | `—` | API du compte Stremio (changer seulement pour les tests) |
+| `tempDir` | `—` | vignettes et segments de lecture (peut être placé sur un autre disque) |

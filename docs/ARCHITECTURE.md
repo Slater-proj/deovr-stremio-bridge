@@ -25,18 +25,32 @@ DeoVR (PC)                    Pont (Node, ce dépôt)                       Stre
 
 | Fichier | Rôle |
 |---|---|
-| `bridge/lib.js` | tout le serveur (HTTP, addons, DNS, scrape, registre, HLS, interface) |
-| `bridge/server.js` | point d'entrée, bannière, code de sortie 2 si le port est pris |
-| `bridge/diagnose.js` | diagnostic complet → `diagnostic-report.txt/json` |
-| `bridge/report.js` | rapport d'assistance (secrets masqués) |
-| `bridge/setup.js` | assistant `config.json` |
+| `bridge/lib.js` | le serveur (HTTP, addons, DNS, scrape, registre, HLS, interface) |
+| `bridge/server.js` | point d'entrée : options de ligne de commande, bannière, ouverture du navigateur, code de sortie 2 si le port est pris |
+| `bridge/paths.js` | où vivent les données : exe portable (`<exe>\data`), code (`dossier du code`), repli `%APPDATA%` |
+| `bridge/auth.js` | compte Stremio : page `/setup`, connexion, clé de session, déconnexion, migration des anciens `config.json` |
+| `bridge/secrets.js` | stockage de la clé : DPAPI via PowerShell sous Windows, fichier 0600 ailleurs |
+| `bridge/version.js` | numéro de version (source unique avec `package.json`, contrôlé par `npm run check`) |
+| `bridge/diagnose.js`, `bridge/report.js` | diagnostic complet ; rapport d'assistance (secrets masqués) |
 | `bridge/test/` | petites vidéos de test (MP4 2D, MP4 3D SBS, MKV) et vignette |
-| `tests/` | tests unitaires et d'intégration (`node:test`) |
-| `scripts/` | tests, vérifications, génération de la doc de configuration, fabrication de la release |
+| `scripts/build-exe.js` | assemble `bridge/*.js` en un script, fabrique l'exe (Node SEA) et le zip portable |
+| `scripts/smoke-exe.js` | lance l'exe réellement fabriqué et vérifie le parcours complet |
+| `packaging/windows/` | fichiers livrés avec l'exe (LISEZMOI, `.bat`, notices tierces) |
+| `tests/`, `scripts/` | tests (`node:test`), vérifications, génération de la doc, fabrication des archives |
+
+## Exécutable portable
+
+`build-exe.js` concatène les modules de `bridge/` dans un seul script (petit registre de modules : `require('./x')` y est résolu en interne), produit un *blob* Node SEA et l'injecte dans une copie de `node.exe` (`node --build-sea`, ou `postject` à défaut). L'exe est donc le runtime Node complet + le code ; seuls `ffmpeg\` et `bridge/test/` restent à côté. `paths.js` repère l'exe (`node:sea`) et choisit le dossier de données ; `lib.js` cherche `ffmpeg\ffmpeg.exe` à côté de l'exe avant le `PATH`.
+
+## Mode développeur
+
+`--dev` (ou `BRIDGE_DEV=1`) : `cfg.dev` et `cfg.debug` à vrai ; la sortie d'ffmpeg est journalisée ligne à ligne ; `/dev` liste les points de diagnostic ; `/debug` indique version, état du compte (sans secret) et chemins. Le mode dev ne change aucun comportement fonctionnel, il ajoute seulement des informations.
 
 ## Choix de conception
 
-- **Zéro dépendance** : un seul `lib.js`, installable sans `npm install`.
+- **Zéro dépendance** : aucun `npm install` ; l'exe est Node + ce code, sans autre paquet.
+- **Pas d'OAuth chez Stremio** : le seul moyen d'obtenir une clé est l'e-mail + mot de passe (API `/api/login`). Le pont les demande donc sur une page locale, garde la clé chiffrée et jette le mot de passe.
+- **Tout au même endroit** : un exe portable ne doit pas disséminer de fichiers ; `data\` à côté de l'exe, `%APPDATA%` seulement si ce dossier est en lecture seule.
 - **DeoVR prefetch les fiches** (≈ 12 par page) et remplace le titre de la liste par celui de la fiche après 2-3 s : d'où le calcul identique des pastilles.
 - **Pourquoi du HLS** : le lecteur de DeoVR abandonne si aucune donnée n'arrive après ~5-15 s ; un flux HLS qui répond tout de suite (écran de chargement) évite l'abandon pendant que Stremio démarre.
 - **Pas de téléchargement en tâche de fond** pour « tester » les films : trop lourd et inutile, les trackers donnent déjà une bonne indication.

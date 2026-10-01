@@ -17,7 +17,7 @@
 
 ---
 
-A tiny local web server that sits between **DeoVR** (PC version, on Steam) and **Stremio**. DeoVR's built-in browser opens the bridge and shows a native library — tabs, thumbnails, VR flags. The bridge reads your Stremio addons, lets Stremio's own streaming server download the torrent, and feeds DeoVR a stream it can play. No Debrid account, no cloud service, no npm dependency: Node.js and ffmpeg only.
+A tiny local web server that sits between **DeoVR** (PC version, on Steam) and **Stremio**. DeoVR's built-in browser opens the bridge and shows a native library — tabs, thumbnails, VR flags. The bridge reads your Stremio addons, lets Stremio's own streaming server download the torrent, and feeds DeoVR a stream it can play. No Debrid account, no cloud service, no npm dependency: a single portable `.exe` (Node.js and ffmpeg included).
 
 Designed on a Pimax Dream Air + RTX 4090; any PCVR headset running DeoVR for Windows should work.
 
@@ -30,8 +30,11 @@ Designed on a Pimax Dream Air + RTX 4090; any PCVR headset running DeoVR for Win
 - **Honest loading screen** at every click: step, peers, MB received, real vs needed speed, buffer, ETA, and plain messages such as "not enough speed" or "no source". It switches to the film by itself once enough is buffered.
 - **VR declared correctly** — 180° dome, 360° sphere, fisheye or MKX200, side-by-side or top-bottom, detected from the catalogue, genre and title (`LR`, `TB`, `OU` included).
 - **Stable status badges** in titles: `[S12] Title`, `[EN COURS 18 % · 1,4 Mo/s]`, `[PRÊT · 8 min en tampon]`, `[BLOQUÉ · 0 pair]` — identical in the list and the film page.
-- **Built to keep running**: ffmpeg is restarted at the right position if it crashes, watched segments are trimmed when the disk gets full, the Stremio cache size is checked, a clear message appears if Stremio isn't running, and `start.bat` restarts the bridge if it stops.
-- **Diagnostics included**: `diagnose.bat`, `RAPPORT.bat` (a support report with secrets masked), per-click logs, a per-film summary, `/status` and `/debug/downloads`.
+- **Built to keep running**: ffmpeg is restarted at the right position if it crashes, watched segments are trimmed when the disk gets full, the Stremio cache size is checked, a clear message appears if Stremio isn't running, and `start.bat` (Node.js variant) restarts the bridge if it stops.
+- **Portable, no installation**: one `DeoVR-Stremio-Bridge.exe` with Node.js and ffmpeg inside the zip; everything it writes stays in a `data\` folder next to it. Delete the folder and it is gone.
+- **Your Stremio password is never stored.** You sign in once on a local page (`/setup`, reachable from the PC only); the bridge keeps a session key encrypted with Windows DPAPI.
+- **Developer mode** (`--dev` / `LANCER-MODE-DEV.bat`): detailed console log, ffmpeg output, a `/dev` page, and `RAPPORT-SUPPORT.bat` which writes a support report (secrets masked) with everything needed to debug.
+- **Diagnostics included**: `DIAGNOSTIC.bat`, a support report, per-click logs, a per-film summary, `/status` and `/debug/downloads`.
 
 ## How it works
 
@@ -54,21 +57,26 @@ More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | | |
 |---|---|
-| OS | Windows 10/11 (the code also runs on Linux/macOS, that is what CI covers) |
+| OS | Windows 10/11 x64 (the code also runs on Linux/macOS, that is what most of CI covers) |
 | Stremio | desktop app running (streaming server on `127.0.0.1:11470`) with at least one addon |
 | DeoVR | PC version (Steam) |
-| Node.js | 20 or newer (CI runs the tests on Node 24 LTS) — `INSTALL.bat` installs it with winget |
-| ffmpeg | recommended — `INSTALL.bat` installs it; needed for MKV, the loading screen and thumbnails |
+| Node.js / ffmpeg | **nothing to install** with the portable exe (both included). The advanced Node.js zip needs Node 20+ and ffmpeg (`INSTALL.bat` installs them with winget) |
 | Stremio cache | Settings → Streaming → cache **unlimited or ≥ 20 GB** (VR films are huge) |
 
 ## Quick start
 
-1. Download the latest zip from [Releases](../../releases/latest) and unzip it anywhere.
-2. Double-click `INSTALL.bat`. It installs Node/ffmpeg if missing and asks for your Stremio e-mail and password. They are stored in `config.json`, which never leaves your PC.
-3. Start Stremio, then double-click `start.bat`.
-4. In DeoVR's browser, type `http://localhost:8080` (or the port in your `config.json`).
+1. Download `DeoVR-Stremio-Bridge-vX.Y.Z-windows-x64.zip` from [Releases](../../releases/latest) and unzip it anywhere (not in *Program Files*).
+2. Start Stremio, then double-click **`DeoVR-Stremio-Bridge.exe`**. Windows SmartScreen may warn because the exe is not code-signed: *More info → Run anyway*.
+3. First run only: your browser opens a local sign-in page — enter your Stremio e-mail and password once.
+4. In DeoVR's browser, type `http://localhost:8080`.
 
-Optional: `DEMARRAGE-AUTO.bat` starts the bridge with Windows; `PARE-FEU.bat` opens the firewall if you want to reach the bridge from another device.
+The console window is the bridge's log; closing it stops the bridge. Everything (settings, encrypted key, logs, temp files) lives in `data\` beside the exe. Details, options and the advanced Node.js variant: [docs/INSTALL.md](docs/INSTALL.md).
+
+Optional: `DEMARRAGE-AUTO.bat` starts the bridge with Windows; `PARE-FEU.bat` opens the firewall for another device; `LANCER-MODE-DEV.bat` starts it in developer mode; `RAPPORT-SUPPORT.bat` builds a support report.
+
+## Security of your Stremio account
+
+Stremio has no OAuth, so the only way to get a session is e-mail + password. The bridge asks for them on a page served **only to the PC itself**, exchanges them for a session key, and forgets the password. The key is stored in `data\secrets.dat`, encrypted with **Windows DPAPI** (readable only by your Windows account on this PC). `--logout` deletes it. Full description and limits: [SECURITY.md](SECURITY.md).
 
 ## What is verified, and what is not
 
@@ -78,18 +86,20 @@ Optional: `DEMARRAGE-AUTO.bat` starts the bridge with Windows; `PARE-FEU.bat` op
 | click ⇒ download, loading screen ⇒ film, "En cours" tab | `deovr://` links opened from DeoVR's browser (page `/t`) |
 | ffmpeg crash recovery, disk trimming, cache budget, Stremio-down message | real field names of Stremio's `/settings` and `stats.json` on every Stremio version |
 | films with 0 seeders never produce a fake film | accents and `·` rendering in DeoVR titles |
+| sign-in page and its protections, no password on disk, key persistence, log-out, legacy `config.json` migration | — |
+| the **real exe**, built on Windows in CI, started in a clean folder (smoke test: bundled ffmpeg, data folder, sign-in page, library, loading-screen switch, report) | DPAPI encryption on your own PC and exe behaviour on your antivirus / SmartScreen |
 
 The real-device test protocol and how to send a useful report are in [docs/TESTING.md](docs/TESTING.md).
 
 ## Test builds
 
-Every green push to `main` refreshes the **[dev-build pre-release](../../releases/tag/dev-build)**: the very latest code, passed the automated tests but **not yet validated on a real headset**. Prefer the [latest release](../../releases/latest) unless you want to help test.
+Every green push to `main` refreshes the **[dev-build pre-release](../../releases/tag/dev-build)** (portable exe + Node.js zip): the very latest code, passed the automated tests and the exe smoke test but **not yet validated on a real headset**. Prefer the [latest release](../../releases/latest) unless you want to help test.
 
 ## Documentation
 
 | Guide | |
 |---|---|
-| [Install](docs/INSTALL.md) | step by step, with and without `INSTALL.bat` |
+| [Install](docs/INSTALL.md) | portable exe (recommended) or Node.js variant |
 | [Usage](docs/USAGE.md) | tabs, badges, the loading screen, search |
 | [Configuration](docs/CONFIGURATION.md) | every `config.json` option (generated from the code) |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | symptoms → causes → fixes |
@@ -103,10 +113,11 @@ git clone https://github.com/Slater-proj/deovr-stremio-bridge.git
 cd deovr-stremio-bridge
 npm test            # unit + integration tests (needs ffmpeg), mocks only, no real Stremio
 npm run check       # syntax check + configuration doc up to date
-npm run build       # builds dist/deovr-stremio-bridge-vX.Y.Z.zip
+npm run build       # builds dist/deovr-stremio-bridge-vX.Y.Z.zip (Node.js variant)
+npm run build:exe   # Windows: builds the portable exe zip (see docs/MAINTAINING.md)
 ```
 
-CI runs the full test suite on Windows with Node 24 (about 4 minutes), plus a parallel job that builds the release zip and checks its content. Pushing a tag `vX.Y.Z` that matches `package.json` builds the zip and publishes a GitHub Release with the matching section of the changelog.
+CI runs the full test suite on Windows with Node 24, builds the portable exe and smoke-tests the real executable; a parallel job checks the Node.js zip. Pushing a tag `vX.Y.Z` that matches `package.json` builds both zips and publishes a GitHub Release with the matching section of the changelog.
 
 ## Legal
 

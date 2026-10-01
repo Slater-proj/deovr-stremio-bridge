@@ -1,0 +1,35 @@
+DeoVR-Stremio Bridge - version portable (aucune installation)
+==============================================================
+
+Relie votre bibliotheque Stremio a DeoVR (casque PC VR, Windows).
+
+DEMARRER
+  1. Lancez l'application Stremio (son serveur de streaming doit tourner).
+  2. Double-clic sur DeoVR-Stremio-Bridge.exe
+  3. Premiere fois : votre navigateur s'ouvre sur une page de connexion Stremio.
+     Saisissez e-mail et mot de passe UNE fois : le mot de passe n'est pas enregistre,
+     seule une cle de session est gardee, chiffree par Windows.
+  4. Dans DeoVR (navigateur integre), tapez  http://localhost:8080
+
+La fenetre noire est la console du pont : la fermer arrete le pont.
+
+TOUT RESTE DANS CE DOSSIER
+  data\    configuration, cle Stremio chiffree, journaux, etat, fichiers temporaires.
+  Supprimer ce dossier supprime tout : rien n'est installe ailleurs sur le PC.
+  (La cle chiffree n'est lisible que par votre compte Windows sur ce PC : si vous copiez
+  le dossier ailleurs, le pont redemande simplement la connexion.)
+
+EN CAS DE PROBLEME / POUR ME FAIRE REMONTER UN COMPORTEMENT
+  LANCER-MODE-DEV.bat     lance le pont avec les journaux detailles (a utiliser pour les essais)
+  RAPPORT-SUPPORT.bat     prepare data\rapport-support.txt (journaux + etat, sans secret) a transmettre
+  DIAGNOSTIC.bat          diagnostic complet
+
+AUTRES OUTILS
+  DEMARRAGE-AUTO.bat / DEMARRAGE-AUTO-RETIRER.bat   lancer le pont avec Windows
+  PARE-FEU.bat (administrateur)                      casque autonome / autre appareil du reseau
+  DeoVR-Stremio-Bridge.exe --help                    toutes les options (--dev, --login, --logout, --port, --data-dir ...)
+
+Documentation complete : dossier docs\   |   Projet : https://github.com/Slater-proj/deovr-stremio-bridge
+
+Windows SmartScreen peut afficher un avertissement au premier lancement (application non signee) :
+"Informations complementaires" puis "Executer quand meme".

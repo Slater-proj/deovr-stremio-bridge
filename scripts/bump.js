@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Change de version en un seul geste : node scripts/bump.js 10.3.0   (ou : npm run bump -- 10.3.0)
-//  - package.json "version", bridge/lib.js VERSION (« 10.3 »), CHANGELOG.md (la section [Non publié] devient [10.3.0] — date)
+//  - package.json "version", bridge/version.js, CHANGELOG.md (la section [Non publié] devient [10.3.0] — date)
 //  - ne fait AUCUNE commande git : relisez le diff, puis committez et posez le tag (voir docs/MAINTAINING.md)
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), v = process.argv[2];
@@ -14,9 +14,9 @@ const chg = read('CHANGELOG.md');
 if (!/^## \[Non publié\]\s*$/m.test(chg)) { console.error('CHANGELOG.md : section « ## [Non publié] » introuvable.'); process.exit(1); }
 const body = chg.split(/^## \[Non publié\]\s*$/m)[1].split(/^## \[/m)[0].trim();
 if (!body) { console.error('CHANGELOG.md : la section [Non publié] est vide. Décrivez d\'abord les changements (Ajouté / Changé / Corrigé).'); process.exit(1); }
-const date = new Date().toISOString().slice(0, 10), [maj, min] = v.split('.');
+const date = new Date().toISOString().slice(0, 10);
 write('package.json', pkg.replace(/("version":\s*")[^"]+(")/, `$1${v}$2`));
-const lib = read('bridge/lib.js'); if (!/const VERSION = '[^']+'/.test(lib)) { console.error('VERSION introuvable dans bridge/lib.js'); process.exit(1); }
-write('bridge/lib.js', lib.replace(/const VERSION = '[^']+'/, `const VERSION = '${maj}.${min}'`));
+const ver = read('bridge/version.js'); if (!/version: '[^']+'/.test(ver)) { console.error('version introuvable dans bridge/version.js'); process.exit(1); }
+write('bridge/version.js', ver.replace(/version: '[^']+'/, `version: '${v}'`));
 write('CHANGELOG.md', chg.replace(/^## \[Non publié\]\s*$/m, `## [Non publié]\n\n## [${v}] — ${date}`));
 console.log(`${old} -> ${v}\n\nProchaines étapes :\n  npm run check && npm test\n  git add -A && git commit -m "v${v}"\n  git push        (attendre la CI verte)\n  git tag v${v} && git push origin v${v}   (publie la release)`);

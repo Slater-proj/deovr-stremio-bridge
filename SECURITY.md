@@ -1,11 +1,28 @@
 # Sécurité
 
-## Ce que le pont stocke et expose
+## Compte Stremio : ce qui est stocké
 
-- `config.json` contient votre **e-mail et mot de passe Stremio en clair** (nécessaires pour lire la liste de vos addons). Il reste sur votre PC, est exclu du dépôt (`.gitignore`) et des archives de release. Protégez le dossier du pont comme vous protégez le mot de passe lui-même. Alternative : `authKey` (clé d'authentification Stremio) ou variables d'environnement.
+- Le **mot de passe n'est jamais enregistré** (ni dans `config.json`, ni dans les journaux, ni dans les rapports). Vous le saisissez une fois sur la page locale `http://localhost:PORT/setup` ; le pont l'envoie à l'API de Stremio, reçoit une **clé de session** (`authKey`) et oublie le mot de passe.
+- La clé est enregistrée dans **`secrets.dat`** (dossier `data\` à côté de l'exe), **chiffrée avec Windows DPAPI** (portée « utilisateur courant »). Le fichier n'est lisible que par **votre compte Windows sur ce PC** : copié ailleurs ou lu par un autre utilisateur, il est inutilisable et le pont redemande simplement la connexion.
+- Hors Windows (tests, Linux/macOS), la clé est écrite **non chiffrée** (fichier en mode 0600) : c'est signalé dans `/debug` (`stockage`). Ne l'utilisez pas ainsi sur une machine partagée.
+- La clé donne accès à votre compte Stremio comme une session ouverte : supprimez-la avec `--logout` (ou *Se déconnecter* sur `/setup`), et déconnectez les sessions depuis le site de Stremio si l'appareil est perdu.
+- Anciennes installations : un `email`/`password` présent dans `config.json` est converti au premier lancement (clé enregistrée chiffrée, mot de passe effacé du fichier). Les variables d'environnement `STREMIO_EMAIL` / `STREMIO_PASSWORD` et `authKey` restent acceptées pour l'automatisation, mais préférez `/setup`.
+
+### Protections de la page `/setup`
+
+Accessible **uniquement depuis le PC lui-même** (adresse source loopback), même si le pont écoute sur le réseau ; l'en-tête `Host` doit être `localhost`/`127.0.0.1` (contre le *DNS rebinding*) ; l'en-tête `Origin` est vérifié (contre le CSRF) ; un jeton aléatoire par lancement est exigé dans le formulaire ; corps limité à 8 Ko ; 5 échecs par minute au maximum ; en-têtes `Content-Security-Policy`, `Cache-Control: no-store`, `X-Frame-Options`. Tests : `tests/integration/account.test.js`.
+
+## Ce que le pont expose
+
 - Le pont écoute par défaut sur **toutes les interfaces** (`bindHost: "0.0.0.0"`) pour que d'autres appareils du réseau local (casque autonome) puissent l'utiliser. Il n'a **pas d'authentification** : toute machine de votre réseau local peut lister votre bibliothèque et déclencher des téléchargements. Sur un PC VR seul, mettez `"bindHost": "127.0.0.1"`. N'exposez jamais le port sur Internet.
-- Les pages de diagnostic (`/debug/*`, `/status`) ne renvoient ni mot de passe ni URL d'addon en clair (masqués), mais elles montrent les titres de vos films et vos adresses locales.
-- Les journaux et `rapport-support.txt` masquent adresses et e-mail ; relisez-les avant de les publier.
+- Les pages de diagnostic (`/debug/*`, `/status`, `/dev`) ne renvoient ni mot de passe, ni clé, ni URL d'addon en clair (masqués), mais elles montrent les titres de vos films, vos chemins et vos adresses locales.
+- Les journaux et `rapport-support.txt` masquent adresses et e-mail ; relisez-les avant de les publier. Ne publiez jamais `config.json` ni `secrets.dat`.
+
+## Exécutable et logiciels tiers
+
+- L'exe n'est **pas signé** (pas de certificat de signature de code) : SmartScreen avertit au premier lancement. Vérifiez que vous l'avez téléchargé depuis la page *Releases* de ce dépôt ; il est fabriqué par GitHub Actions à partir du code public (`BUILD-INFO.txt` donne le commit).
+- Le zip embarque **ffmpeg** (licence GPL v3) comme programme séparé : voir `THIRD-PARTY-NOTICES.txt` et `ffmpeg\LICENSE.txt`.
+- Aucune dépendance npm : rien d'autre que Node.js (embarqué dans l'exe) et ffmpeg.
 
 ## Signaler une vulnérabilité
 

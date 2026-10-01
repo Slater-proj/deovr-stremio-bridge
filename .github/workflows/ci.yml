@@ -14,11 +14,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Windows = la seule plateforme visée (DeoVR PC). Une seule version de Node : la 24 (LTS), celle qu'installe INSTALL.bat.
-  tests:
-    name: Tests (Windows, Node 24)
+  # Windows = la seule plateforme visée (DeoVR PC). Une seule version de Node : la 24 (LTS).
+  # Ce job teste le code, FABRIQUE L'EXE PORTABLE, puis lance cet exe pour de vrai (test de fumée) avant de le publier comme artefact.
+  windows:
+    name: Tests + exe portable (Windows, Node 24)
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      BUILD_SUFFIX: -dev.${{ github.run_number }}.${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -30,10 +33,39 @@ jobs:
         run: npm run check
       - name: Tests unitaires et d'intégration
         run: npm test
+      - name: Dossier de ffmpeg à embarquer
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem C:\ProgramData\chocolatey\lib\ffmpeg -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          if (-not $f -or -not (Test-Path (Join-Path $f.DirectoryName 'ffprobe.exe'))) { throw "ffmpeg.exe / ffprobe.exe introuvables" }
+          "FFMPEG_DIR=$($f.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & $f.FullName -version | Select-Object -First 1
+      - name: Suffixe de build court
+        shell: bash
+        run: echo "BUILD_SUFFIX=-dev.${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - name: Fabriquer l'exe portable
+        run: node scripts/build-exe.js --ffmpeg-dir "$env:FFMPEG_DIR"
+      - name: Test de fumée de l'exe (démarrage réel, ffmpeg embarqué, écran de chargement, rapport)
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\DeoVR-Stremio-Bridge-v*-windows-x64.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\portable"
+          node scripts/smoke-exe.js "$env:RUNNER_TEMP\portable\DeoVR-Stremio-Bridge"
+      - name: Journaux du test de fumée (en cas d'échec)
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:RUNNER_TEMP\portable\DeoVR-Stremio-Bridge\data" -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName -Tail 80 -ErrorAction SilentlyContinue }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: exe-portable-windows-${{ github.run_number }}
+          path: dist/DeoVR-Stremio-Bridge-v*-windows-x64.zip
+          retention-days: 14
+          if-no-files-found: error
 
-  # En parallèle des tests (n'allonge pas la durée) : fabrique le zip de TEST, contrôle son contenu et le met à disposition.
+  # En parallèle : variante « Node » (pour les utilisateurs avancés) fabriquée et contrôlée.
   archive:
-    name: Archive de test
+    name: Archive Node (variante avancée)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -42,31 +74,24 @@ jobs:
         with:
           node-version: 24
       - name: Build (suffixe de test)
-        run: |
-          echo "BUILD_SUFFIX=-dev.${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          BUILD_SUFFIX="-dev.${{ github.run_number }}.${GITHUB_SHA::7}" npm run build
+        run: BUILD_SUFFIX="-dev.${{ github.run_number }}.${GITHUB_SHA::7}" npm run build
       - name: Contrôle du contenu de l'archive
         run: |
           unzip -tq dist/*.zip
-          if unzip -l dist/*.zip | grep -E 'config\.json$|\.log$|diagnostic-report|rapport-support|bridge-state'; then echo "fichier local dans l'archive" && exit 1; fi
+          if unzip -l dist/*.zip | grep -E 'config\.json$|\.log$|diagnostic-report|rapport-support|bridge-state|secrets\.dat'; then echo "fichier local dans l'archive" && exit 1; fi
           unzip -p dist/*.zip 'deovr-stremio-bridge/start.bat' | file - | grep -q CRLF
           unzip -p dist/*.zip 'deovr-stremio-bridge/BUILD-INFO.txt'
-      - uses: actions/upload-artifact@v7
-        with:
-          name: deovr-stremio-bridge-dev-${{ github.run_number }}
-          path: dist/*.zip
-          retention-days: 14
-          if-no-files-found: error
 
   # Uniquement sur main, uniquement si tout est vert : met à jour la pré-release « dev-build » (toujours le dernier build de test).
   dev-release:
     name: Pré-release dev-build
-    needs: [tests, archive]
+    needs: [windows, archive]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     concurrency:
       group: dev-release
       cancel-in-progress: false
@@ -79,13 +104,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Build (suffixe de test)
+      - name: Build Node (suffixe de test)
         run: BUILD_SUFFIX="-dev.${{ github.run_number }}.${GITHUB_SHA::7}" npm run build
+      - name: Récupérer l'exe portable fabriqué et testé par le job Windows
+        run: gh run download "$GITHUB_RUN_ID" -n "exe-portable-windows-${{ github.run_number }}" -D dist
       - name: Publier la pré-release
         run: |
+          ls -la dist
           gh release delete dev-build --cleanup-tag --yes || true
           {
-            echo "**Build de test automatique** du dernier commit de \`main\` (${GITHUB_SHA::7}). Tests verts, mais **non validé sur un vrai casque**."
+            echo "**Build de test automatique** du dernier commit de \`main\` (${GITHUB_SHA::7}). Tests verts et exe vérifié par un test de fumée sous Windows, mais **non validé sur un vrai casque**."
+            echo
+            echo "- **\`DeoVR-Stremio-Bridge-…-windows-x64.zip\`** : version portable, sans installation (Node et ffmpeg inclus). C'est celle à utiliser."
+            echo "- \`deovr-stremio-bridge-…zip\` : variante pour utilisateurs avancés (Node.js à installer)."
             echo
             echo "Dernier changement : ${COMMIT_MSG%%$'\n'*}"
             echo

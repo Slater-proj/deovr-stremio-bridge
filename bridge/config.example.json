@@ -1,6 +1,4 @@
 {
-  "email": "ton-email-stremio@exemple.com",
-  "password": "ton-mot-de-passe",
   "port": 8080,
   "localStremio": "http://127.0.0.1:11470",
   "localStremioPublic": "",

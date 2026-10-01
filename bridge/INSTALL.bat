@@ -19,7 +19,9 @@ if errorlevel 1 (
   winget install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
   echo Si ffmpeg vient d'etre installe, ferme puis relance start.bat pour qu'il soit pris en compte.
 )
-node setup.js
+echo.
+echo Premiere utilisation : lance start.bat. Ton navigateur s'ouvrira sur la page de connexion Stremio
+echo (le mot de passe n'est jamais enregistre, seule une cle de session est conservee).
 echo.
 set /p RUN=Lancer le diagnostic maintenant ? (O/n) 
 if /i "%RUN%"=="n" goto end

@@ -5,7 +5,7 @@ Merci ! Quelques règles simples :
 - **Aucune dépendance d'exécution** : le pont doit rester un dossier de `.js` lançable avec Node seul. Les outils de dev sont aussi sans dépendance (`node:test`).
 - Avant une PR : `npm run check && npm test`. Si vous changez les commentaires/valeurs de `cfg` dans `bridge/lib.js`, lancez `npm run docs` (régénère `docs/CONFIGURATION.md`).
 - Tout correctif de bug s'accompagne d'un test qui échoue avant et réussit après.
-- **Jamais de secret** : pas de `config.json`, d'e-mail, de mot de passe, d'URL d'addon, de journal ni de rapport dans le dépôt, les tickets ou les PR (`npm run check` le contrôle en partie).
+- **Jamais de secret** : pas de `config.json`, de `secrets.dat`, d’e-mail, de mot de passe, d'URL d'addon, de journal ni de rapport dans le dépôt, les tickets ou les PR (`npm run check` le contrôle en partie).
 - Le projet **n'embarque aucune source ni addon** et n'en recommande pas : n'en ajoutez pas dans le code, les tests ou la doc.
 - Fichiers `.bat` : fins de ligne CRLF (géré par `.gitattributes` et par `scripts/make-release.js`).
 - Messages de la console et de l'écran de chargement : en français pour l'instant ; une internationalisation serait bienvenue (ouvrez un ticket avant de commencer).
@@ -22,7 +22,7 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour s'y retrouver dans `bridg
 
 ## Publier une version (mainteneurs)
 
-1. Décrire les changements dans `CHANGELOG.md`, section *Non publié*, puis `npm run bump -- X.Y.Z` (met à jour `package.json`, `VERSION` dans `bridge/lib.js` et le changelog).
-2. `git tag vX.Y.Z && git push origin vX.Y.Z` : le workflow *Release* teste, fabrique le zip et crée la release GitHub.
+1. Décrire les changements dans `CHANGELOG.md`, section *Non publié*, puis `npm run bump -- X.Y.Z` (met à jour `package.json`, `bridge/version.js` et le changelog).
+2. `git tag vX.Y.Z && git push origin vX.Y.Z` : le workflow *Release* teste, fabrique les deux zips (Node et exe portable), teste l’exe et crée la release GitHub.
 
 Cycle complet, builds de test et réglages du dépôt : [docs/MAINTAINING.md](docs/MAINTAINING.md).

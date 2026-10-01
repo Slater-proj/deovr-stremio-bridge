@@ -11,3 +11,8 @@ rapport-support.txt
 *.tmp
 .DS_Store
 Thumbs.db
+# --- données de l'exe portable et fichiers sensibles ---
+data/
+tmp/
+secrets.dat
+dist/exe-build/

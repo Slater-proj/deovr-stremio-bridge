@@ -6,7 +6,8 @@ const { Readable } = require('stream');
 
 // ---------- Configuration ----------
 let file = {};
-const DATA_DIR = process.env.BRIDGE_DATA_DIR || __dirname;   // config.json, journaux et état : à côté du code par défaut (BRIDGE_DATA_DIR pour les tests / une installation séparée)
+const PATHS = require('./paths').resolve();   // exe : <dossier de l'exe>\data ; node server.js : dossier du code ; BRIDGE_DATA_DIR / --data-dir : imposé (voir paths.js)
+const DATA_DIR = PATHS.dataDir, APP_DIR = PATHS.appDir;   // DATA_DIR : config.json, clé Stremio chiffrée, journaux, état, temporaires
 try { file = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'config.json'), 'utf8')); } catch {}
 const env = process.env;
 try { if (env.IPV4_FIRST !== '0') require('dns').setDefaultResultOrder('ipv4first'); } catch {}
@@ -36,7 +37,7 @@ const cfg = {
   healthCheckMs: file.healthCheckMs ?? 10000,     // test de santé des torrents avant de les proposer (0 = désactivé)
   torrentStartMs: +(env.TORRENT_START_MS || file.torrentStartMs || 120000),   // au-delà, le relais répond 504 au lieu de laisser DeoVR charger à l'infini
   platform: (env.DEOVR_PLATFORM || file.platform || 'windows').toLowerCase(),   // 'windows' (DeoVR PC : MP4/MOV/AVI, pas MKV/AV1/VP9) ou 'quest' (MKV/WebM/AV1 ok)
-  ffmpeg: file.ffmpeg || env.FFMPEG || 'ffmpeg',   // pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV)
+  ffmpeg: file.ffmpeg || env.FFMPEG || ['ffmpeg.exe', 'ffmpeg'].map(n => path.join(APP_DIR, 'ffmpeg', n)).find(f => fs.existsSync(f)) || 'ffmpeg',   // pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV)
   remux: file.remux ?? true,
   localDirs: file.localDirs || (env.LOCAL_DIRS ? env.LOCAL_DIRS.split(';').filter(Boolean) : []),   // dossiers de vidéos sur ce PC (onglet « Mes vidéos »)
   showHealth: file.showHealth ?? true,            // pastille de santé dans le titre
@@ -72,9 +73,12 @@ const cfg = {
   jsonDeadlineMs: file.jsonDeadlineMs ?? 8000,     // DeoVR abandonne une fiche vidéo après ~10 s : on répond toujours avant
   dnsMode: (env.DNS_MODE || file.dnsMode || 'auto').toLowerCase(),   // auto : DNS du PC puis DNS public si échec | public : DNS public d'abord | system : DNS du PC seulement
   publicDns: file.publicDns || ['1.1.1.1', '8.8.8.8', '9.9.9.9'],
-  debug: !!(env.DEBUG || file.debug),
+  debug: !!(env.DEBUG || file.debug || env.BRIDGE_DEV),
+  dev: !!env.BRIDGE_DEV,                          // mode développeur (--dev) : journaux détaillés, ffmpeg bavard, page /dev
+  stremioApi: (env.STREMIO_API || file.stremioApi || 'https://api.strem.io').replace(/\/$/, ''),   // API du compte Stremio (changer seulement pour les tests)
+  tempDir: env.BRIDGE_TMP || file.tempDir || path.join(DATA_DIR, 'tmp'),   // vignettes et segments de lecture (peut être placé sur un autre disque)
 };
-const VERSION = '10.2';
+const VERSION_INFO = require('./version'), VERSION = VERSION_INFO.version.split('.').slice(0, 2).join('.'), VERSION_FULL = VERSION_INFO.version + (VERSION_INFO.build && VERSION_INFO.build.suffix ? VERSION_INFO.build.suffix : '');
 
 // ---------- Logs (buffer circulaire, consultable sur /debug) ----------
 const DEBUGFILE = path.join(DATA_DIR, 'bridge-debug.log');
@@ -256,6 +260,10 @@ const b64u = s => Buffer.from(s).toString('base64url');
 const unb64u = s => Buffer.from(s, 'base64url').toString();
 
 // ---------- Stremio : addons du compte ----------
+let loginNeeded = false;   // vrai tant que le compte Stremio n'est pas connecté (message dans « En cours » ; page /setup)
+const auth = require('./auth')({ cfg, log, dataDir: DATA_DIR,
+  post: (url, body) => getJson(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+  onChange: () => { cache.clear(); failCache.clear(); loginNeeded = false; } });
 async function getAddons() {
   return cached('addons', 30 * 60000, async () => {
     if (cfg.addonUrls.length) {
@@ -263,20 +271,13 @@ async function getAddons() {
         base: u.replace(/\/manifest\.json$/, ''), manifest: await getJson(u),
       })));
     }
-    let authKey = cfg.authKey;
-    if (!authKey) {
-      if (!cfg.email || !cfg.password) throw new Error('Renseigne email/password (ou authKey) dans config.json');
-      const login = await getJson('https://api.strem.io/api/login', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ type: 'Login', email: cfg.email, password: cfg.password, facebook: false }),
-      });
-      authKey = login.result?.authKey;
-      if (!authKey) throw new Error('Login Stremio refusé : ' + JSON.stringify(login.error || login).slice(0, 200));
-    }
-    const col = await getJson('https://api.strem.io/api/addonCollectionGet', {
+    let ak; try { ak = await auth.key(); loginNeeded = false; } catch (e) { if (e.code === 'NEED_LOGIN') loginNeeded = true; throw e; }
+    const authKey = ak.authKey;
+    const col = await getJson(`${cfg.stremioApi}/api/addonCollectionGet`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'AddonCollectionGet', authKey, update: true }),
     });
+    if (col.error && (col.error.code === 1 || /session|auth/i.test(String(col.error.message || '')))) { auth.invalid(); loginNeeded = true; throw auth.needLoginError(); }
     if (!col.result?.addons) throw new Error('addonCollectionGet : réponse inattendue ' + JSON.stringify(col).slice(0, 200));
     return col.result.addons.map(a => ({
       base: a.transportUrl.replace(/\/manifest\.json$/, ''), manifest: a.manifest,
@@ -419,7 +420,7 @@ function healthTag(m, html) {
 const thumbBusy = new Map(); let thumbActive = 0; const thumbWait = [];
 function thumbUrl(base, url) { return url && cfg.landscapeThumbs && ffmpegOk && /^https?:\/\//i.test(url) ? `${base}/thumb/${b64u(url)}.jpg` : url || ''; }
 async function makeThumb(url) {
-  const thumbDir = path.join(require('os').tmpdir(), 'deovr-bridge-thumbs');
+  const thumbDir = path.join(cfg.tempDir, 'thumbs');
   const f = path.join(thumbDir, require('crypto').createHash('sha1').update(url).digest('hex') + '.jpg');
   if (fs.existsSync(f)) return f;
   if (thumbBusy.has(f)) return thumbBusy.get(f);
@@ -483,7 +484,7 @@ function testVideo(key, base) {
   return { id: 9000 + Object.keys(TESTS).indexOf(key), title: t.title, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, screenType: 'flat', stereoMode: t.stereo, is3d: t.stereo !== 'off', encodings: [{ name: 'h264', videoSources: [{ resolution: t.stereo === 'sbs' ? 1080 : 1080, url }] }] };
 }
 function serveTestFile(req, res, name) {
-  const f = path.join(__dirname, 'test', path.basename(name));
+  const f = path.join(APP_DIR, 'test', path.basename(name));
   if (!/^[\w.-]+$/.test(name) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   const ext = path.extname(f).toLowerCase();
   return serveLocal(req, res, f, { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.jpg': 'image/jpeg' }[ext] || 'application/octet-stream');
@@ -551,7 +552,7 @@ function localVideo(id, base, platform) {
 async function localThumb(req, res, id) {
   const f = localFile(id), fallback = () => serveTestFile(req, res, 'thumb.jpg');
   if (!f || !ffmpegOk) return fallback();
-  const dir = path.join(os.tmpdir(), 'deovr-bridge-thumbs'); fs.mkdirSync(dir, { recursive: true });
+  const dir = path.join(cfg.tempDir, 'thumbs'); fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, id.replace(/[^\w-]/g, '') + '.jpg');
   if (!fs.existsSync(out)) {
     const fmt = detectFormat(f.name, { local: true }), crop = fmt.stereoMode === 'sbs' ? 'crop=iw/2:ih:0:0,' : fmt.stereoMode === 'tb' ? 'crop=iw:ih/2:0:0,' : '';
@@ -562,6 +563,7 @@ async function localThumb(req, res, id) {
 // ---------- Onglets « intelligents » (aucun n'est basé sur une mesure qui télécharge) ----------
 function dlScene(base) {   // « En cours » : les films lancés par un clic (actifs ou en pause), avec leur état
   const list = dlSorted().map(D => ({ title: '[' + dlState(D).label + '] ' + D.title, videoLength: D.runtime || 0, thumbnailUrl: thumbUrl(base, D.poster || ''), video_url: `${base}/video/${D.type || 'movie'}/${encodeURIComponent(D.id)}.json` }));
+  if (loginNeeded) list.unshift({ title: `ATTENTION · Connexion Stremio requise : sur le PC, ouvrez http://localhost:${cfg.port}/setup`, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/empty.json` });
   if (stremioDown) list.unshift({ title: 'ATTENTION · Stremio ne répond pas : lancez Stremio', videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/empty.json` });
   if (!list.length) list.push({ title: 'Aucun film en cours : lancez un film, il apparaîtra ici', videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/empty.json` });
   return { name: 'En cours', list };
@@ -1037,7 +1039,7 @@ const hlsSessions = new Map();   // "hash:idx" -> { dir, proc, last }
 function hlsStart(key, src, label) {
   let s = hlsSessions.get(key);
   if (s && !s.dead) { s.last = Date.now(); return s; }
-  const dir = path.join(os.tmpdir(), 'deovr-bridge-hls', `${key.replace(/[^\w-]/g, '').slice(0, 20)}-${Date.now()}`);
+  const dir = path.join(cfg.tempDir, 'hls', `${key.replace(/[^\w-]/g, '').slice(0, 20)}-${Date.now()}`);
   fs.mkdirSync(dir, { recursive: true });
   const args = ['-nostdin', '-loglevel', 'error', '-i', src, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_segment_filename', path.join(dir, 'seg%05d.ts'), path.join(dir, 'index.m3u8')];
   const proc = cp.spawn(cfg.ffmpeg, args, { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -1247,7 +1249,7 @@ async function bgLoop(D) {
 }
 
 // ----- ffmpeg / police pour l'écran de chargement -----
-for (const d of ['deovr-bridge-live', 'deovr-bridge-hls']) try { const root = path.join(os.tmpdir(), d); for (const n of fs.readdirSync(root)) { const p = path.join(root, n); if (Date.now() - fs.statSync(p).mtimeMs > 6 * 3600000) fs.rmSync(p, { recursive: true, force: true }); } } catch {}   // restes (> 6 h) d'une exécution interrompue
+for (const d of ['live', 'hls']) try { const root = path.join(cfg.tempDir, d); for (const n of fs.readdirSync(root)) { const p = path.join(root, n); if (Date.now() - fs.statSync(p).mtimeMs > 6 * 3600000) fs.rmSync(p, { recursive: true, force: true }); } } catch {}   // restes (> 6 h) d'une exécution interrompue
 const liveSessions = new Map();
 const LOAD_SEG = 4;   // durée d'un segment de chargement (s)
 let ffmpegMajor = 0, hevcEnc = '';
@@ -1288,7 +1290,7 @@ function liveStart(D) {
   let s = D.live;
   if (s && !s.closed && !s.realFail) return s;
   if (s) liveClose(D);
-  const dir = path.join(os.tmpdir(), 'deovr-bridge-live', `${D.hash.slice(0, 10)}-${D.idx}-${Date.now()}`);
+  const dir = path.join(cfg.tempDir, 'live', `${D.hash.slice(0, 10)}-${D.idx}-${Date.now()}`);
   fs.mkdirSync(path.join(dir, 'real'), { recursive: true });
   s = { D, dir, t0: Date.now(), epoch: 0, loaderT0: Date.now(), lastPl: 0, plCount: 0, shown: 0, skipWaits: false, realReady: false, realDone: false, realFail: false, realSegs: [], producedSec: 0, playerSec: 0, renders: new Map(), seen: {}, closed: false, err: '', codec: '', feedActive: 0, feedPos: 0, seqPos: 0, gated: false, durSec: 0 };
   D.live = s; liveSessions.set(D.key, s);
@@ -1322,7 +1324,7 @@ function spawnReal(s) {
     const vm = /Stream #0:\d+[^:]*: Video: ([^\n]+)/.exec(t); if (vm && !s.codec) { s.codec = vm[1].slice(0, 120); dlLog(D, 'info', `vrai film détecté : ${s.codec}`); }
     const dm = /Duration: (\d+):(\d+):([\d.]+)[^\n]*?bitrate: (\d+) kb\/s/.exec(t);
     if (dm && !s.durSec) { s.durSec = +dm[1] * 3600 + +dm[2] * 60 + +dm[3]; D.need = +dm[4] * 125; dlLog(D, 'info', `durée ${fmtDur(s.durSec)}, débit vidéo ${(+dm[4] / 1000).toFixed(1)} Mbit/s => il faut ${mbs(D.need)} pour lire sans saccade`); }
-    for (const line of t.split('\n')) if (/error|invalid|failed|refused|timed out|reconnect/i.test(line)) dlLog(D, 'warn', `ffmpeg : ${line.trim().slice(0, 200)}`);
+    for (const line of t.split('\n')) if (/error|invalid|failed|refused|timed out|reconnect/i.test(line)) dlLog(D, 'warn', `ffmpeg : ${line.trim().slice(0, 200)}`); else if (cfg.dev && line.trim() && !/^\s*(frame|size)=/.test(line)) dlLog(D, 'debug', `ffmpeg : ${line.trim().slice(0, 200)}`);
   });
   proc.on('error', e => { s.err += e.message; dlLog(D, 'warn', `ffmpeg impossible à lancer : ${e.message}`); });
   proc.on('exit', (code, sig) => {
@@ -1504,7 +1506,7 @@ const switchTests = new Map();
 async function switchSession(kind, film, screen, stereo) {
   const old = switchTests.get(kind);
   if (old && old.lastPl && Date.now() - old.lastPl < 25000) return old;   // même lancement (la playlist est rafraîchie en continu)
-  const dir = old ? old.dir : path.join(os.tmpdir(), 'deovr-bridge-switch', kind);
+  const dir = old ? old.dir : path.join(cfg.tempDir, 'switch', kind);
   const D = { title: 'Test de bascule', screen, stereo, res: 1080, peers: 0, speed: 0, need: 0, readBytes: 0, netBytes: 0, runtime: 12, timeline: [], activatedAt: Date.now(), key: 'test:' + kind, active: true, lastPlayer: Date.now(), cur: {} };
   const s = { D, dir, t0: Date.now(), epoch: 0, loaderT0: Date.now(), lastPl: 0, plCount: 0, shown: 0, skipWaits: false, realReady: false, realDone: false, realFail: false, realSegs: [], producedSec: 0, playerSec: 0, renders: new Map(), seen: {}, closed: false, test: true,
     fake: { prog: (x) => Math.min(1, (Date.now() - x.loaderT0) / 10000), lines: (x, i) => ['TEST DE BASCULE (sans torrent)', 'Si vous voyez cet écran, le lecteur DeoVR accepte la playlist HLS.', `Dans quelques secondes la vidéo de test doit démarrer toute seule (${Math.max(0, 10 - Math.round((Date.now() - x.loaderT0) / 1000))} s).`, 'Si la vidéo ne démarre pas : notez-le, c\'est une information importante.'] } };
@@ -1513,7 +1515,7 @@ async function switchSession(kind, film, screen, stereo) {
     fs.mkdirSync(path.join(dir, 'real'), { recursive: true });
     const idxf = path.join(dir, 'real', 'index.m3u8');
     try { fs.rmSync(idxf, { force: true }); } catch {}
-    await new Promise(ok => { const pr = cp.spawn(cfg.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', path.join(__dirname, 'test', film), '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'vod', '-hls_segment_filename', path.join(dir, 'real', 'seg%05d.ts'), idxf], { stdio: 'ignore' }); pr.on('error', ok); pr.on('exit', ok); });
+    await new Promise(ok => { const pr = cp.spawn(cfg.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', path.join(APP_DIR, 'test', film), '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'vod', '-hls_segment_filename', path.join(dir, 'real', 'seg%05d.ts'), idxf], { stdio: 'ignore' }); pr.on('error', ok); pr.on('exit', ok); });
   } else s.dir = dir;
   try {
     const segs = []; let d = 0; for (const l of fs.readFileSync(path.join(dir, 'real', 'index.m3u8'), 'utf8').split('\n')) { const m = /^#EXTINF:([\d.]+)/.exec(l); if (m) d = +m[1]; else if (/^seg\d+\.ts$/.test(l.trim())) segs.push([l.trim(), d]); }
@@ -1826,6 +1828,8 @@ function start(port = cfg.port) {
     const hm0 = /\/(?:torrent|hls|live|feed)\/([0-9a-f]{40})/i.exec(u.pathname), lm0 = /\/(?:localfile|hls\/local)\/([\w-]+)/.exec(u.pathname);
     res.on('close', () => recordReq({ film: hm0 ? (relayState.get(hm0[1].toLowerCase()) || {}).title : lm0 ? localTitles.get(lm0[1]) : undefined, t: new Date(t0).toISOString(), ip: rip, method: req.method, path: safePath + (u.pathname.startsWith('/torrent') ? '' : ''), range: req.headers.range || null, ua: req.headers['user-agent'] || null, status: res.statusCode, sent, ms: Date.now() - t0, finished: res.writableFinished, clientClosedEarly: !res.writableFinished, upstream: res.upstream || undefined }));
     try {
+      if (u.pathname === '/setup' || u.pathname === '/setup/logout') return auth.handle(req, res, u);
+      if (u.pathname === '/dev' && cfg.dev) { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(devPage(req.headers.host)); }
       if (u.pathname === '/ui' || u.pathname === '/u') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(await uiPage(u, req.headers.host)); }
       if (u.pathname === '/t') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(testLinksPage(req.headers.host)); }
       if (u.pathname === '/open/C') { noteOpen('C', 'redirection du pont', req); res.writeHead(302, { location: `deovr://${base}/video/test/mp4-2d.json?via=C` }); return res.end(); }
@@ -1885,7 +1889,7 @@ function start(port = cfg.port) {
         if (!v) return send(res, 404, { error: 'aucun flux lisible trouvé' });
         return send(res, 200, v._meta ? { ...v, title: healthTag(v._meta) + v._name } : v);   // le titre de la fiche porte la MÊME pastille que la liste
       }
-      if (u.pathname === '/debug') return send(res, 200, { config: { ...cfg, email: cfg.email ? cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: cfg.password ? '***' : '', authKey: cfg.authKey ? '***' : '', addonUrls: cfg.addonUrls.map(redact) }, log: logBuf.slice(-100) });
+      if (u.pathname === '/debug') return send(res, 200, { version: VERSION_FULL, compte: auth.status(), chemins: { donnees: DATA_DIR, application: APP_DIR, temporaire: cfg.tempDir, mode: PATHS.mode, exe: PATHS.sea }, config: { ...cfg, email: cfg.email ? cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: cfg.password ? '***' : '', authKey: cfg.authKey ? '***' : '', addonUrls: cfg.addonUrls.map(redact) }, log: logBuf.slice(-100) });
       const d = u.pathname.match(/^\/debug\/video\/([^/]+)\/(.+)$/);
       if (d) {
         const a = await analyzeVideo(d[1], decodeURIComponent(d[2]), base, req.headers.host, { measure: u.searchParams.get('measure') === '1' });
@@ -1904,9 +1908,14 @@ function start(port = cfg.port) {
   return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, cfg.bindHost, () => { selfPort = server.address().port; setTimeout(() => warmup(port), 2000); setInterval(() => warmup(port), 8 * 60000).unref(); resolve(server); }); });
 }
 
+function devPage(host) {   // /dev (mode --dev uniquement) : tous les points d'observation au même endroit
+  const links = [['/status', 'Suivi des films lancés'], ['/status.json', 'idem (JSON)'], ['/debug', 'Configuration (secrets masqués), chemins, compte'], ['/debug/downloads', 'États et chronologie de chaque film cliqué'], ['/debug/perf', 'Performances, ouvertures de test, écran de chargement'], ['/debug/live', 'Sessions de lecture ffmpeg'], ['/debug/health', 'Santé des torrents (trackers)'], ['/debug/requests', 'Dernières requêtes reçues'], ['/catalogs', 'Catalogues Stremio'], ['/deovr', 'Bibliothèque DeoVR (JSON)'], ['/ui', 'Bibliothèque en page web'], ['/t', 'Test des liens deovr://'], ['/setup', 'Connexion Stremio']];
+  return `<!doctype html><meta charset=utf-8><title>Pont DeoVR · dev</title><style>body{font:15px system-ui;background:#10151c;color:#e8eef5;max-width:760px;margin:30px auto;padding:0 16px}a{color:#8ab4ff}td{padding:3px 12px 3px 0;vertical-align:top}code{background:#1a222d;padding:1px 5px;border-radius:4px}</style><h1>Mode développeur</h1><p>Version <code>${VERSION_FULL}</code> · données <code>${DATA_DIR}</code> · mode <code>${PATHS.mode}</code></p><table>${links.map(([u, d]) => `<tr><td><a href="${u}">${u}</a></td><td>${d}</td></tr>`).join('')}</table><p>Journaux : <code>bridge-debug.log</code>, <code>bridge-requests.log</code>, <code>bridge-decisions.log</code>, <code>bridge-bilans.log</code> (dans le dossier de données).</p>`;
+}
 async function selfCheck() {
+  { const st = auth.status(); if (st.connecte) log('info', `Compte Stremio : connecté (${st.source}${st.stockage === 'dpapi' ? ', clé chiffrée par Windows' : st.stockage ? ', clé non chiffrée (hors Windows)' : ''})`); else log('warn', `Compte Stremio : NON connecté. Ouvrez http://localhost:${cfg.port}/setup dans un navigateur sur ce PC.`); }
   try { const r = await fetch(`${cfg.localStremio}/settings`, { signal: AbortSignal.timeout(4000) }); log('info', `Serveur Stremio local : répond (HTTP ${r.status})`); }
   catch (e) { log('warn', `Serveur Stremio local injoignable (${cfg.localStremio}) : lance l'application Stremio, sinon les torrents ne démarreront pas`); }
-  if (!fs.existsSync(path.join(__dirname, 'test', 'test-2d.mp4'))) log('warn', 'dossier test/ incomplet : les vidéos de test ne seront pas lisibles');
+  if (!fs.existsSync(path.join(APP_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier test/ incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { DATA_DIR, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { DATA_DIR, APP_DIR, PATHS, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };

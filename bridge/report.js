@@ -1,7 +1,7 @@
 // Rassemble tous les journaux utiles dans UN fichier (rapport-support.txt), secrets masqués. Usage : RAPPORT.bat
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), cp = require('child_process');
 const L = require('./lib');
-const dir = process.env.BRIDGE_DATA_DIR || __dirname;
+const dir = L.DATA_DIR;
 const tail = (f, n) => { try { const l = fs.readFileSync(path.join(dir, f), 'utf8').split('\n'); return l.slice(-n).join('\n'); } catch { return '(absent)'; } };
 const head = (f, n) => { try { return fs.readFileSync(path.join(dir, f), 'utf8').split('\n').slice(0, n).join('\n'); } catch { return '(absent)'; } };
 const cfg = { ...L.cfg, email: L.cfg.email ? L.cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: L.cfg.password ? '***' : '', authKey: L.cfg.authKey ? '***' : '', addonUrls: L.cfg.addonUrls.map(L.redact), localDirs: (L.cfg.localDirs || []).map(() => '<dossier>') };
@@ -16,7 +16,8 @@ let txt = [
   `RAPPORT DE SUPPORT — ${new Date().toISOString()}`,
   `Node ${process.versions.node} | ${process.platform} ${require('os').release()} | ffmpeg: ${ff}`,
   `Config : ${JSON.stringify(cfg)}`,
-  `Version du pont : ${L.VERSION}`,
+  `Version du pont : ${L.VERSION_FULL} (données : ${L.PATHS.mode})`,
+  `Compte Stremio : ${JSON.stringify(L.auth.status())}`,
   '\n===== ÉTAT EN DIRECT DU PONT =====', live,
   '\n===== BILANS PAR CLIC (lu / quitté puis repris / abandonné par DeoVR après X s / aucune donnée) =====', tail('bridge-bilans.log', 60),
   '\n===== DÉCISIONS (format VR et raison, sources proposées/écartées, 40 dernières) =====', tail('bridge-decisions.log', 40),
@@ -29,6 +30,6 @@ if (L.cfg.email) txt = txt.split(L.cfg.email).join('***@***');
 txt = txt.replace(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi, (m, h) => `${m.startsWith('https') ? 'https' : 'http'}://hote-${crypto.createHash('sha1').update(h).digest('hex').slice(0, 5)}`);
 txt = txt.replace(/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(pw|club|io|fun|com|net|org|tv|xyz)\b/gi, m => 'hote-' + crypto.createHash('sha1').update(m).digest('hex').slice(0, 5));
 fs.writeFileSync(path.join(dir, 'rapport-support.txt'), txt);
-console.log(`rapport-support.txt écrit (${Math.round(txt.length / 1024)} Ko). Envoie-moi ce fichier.`);
+console.log(`rapport-support.txt écrit (${Math.round(txt.length / 1024)} Ko) : ${path.join(dir, 'rapport-support.txt')}\nEnvoie-moi ce fichier.`);
 process.exit(0);
 })();

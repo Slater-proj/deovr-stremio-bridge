@@ -30,7 +30,9 @@ Pages et diagnostic :
 | `/t`, `/open/C` | page de test des liens `deovr://` |
 | `/status`, `/status.json` | films en cours |
 | `/debug/downloads` | état et chronologie de chaque clic, bilans |
-| `/debug/perf`, `/debug/live`, `/debug/health`, `/debug/requests`, `/debug` | performances, sessions ffmpeg, santé des films, requêtes, configuration masquée |
+| `/debug/perf`, `/debug/live`, `/debug/health`, `/debug/requests`, `/debug` | performances, sessions ffmpeg, santé des films, requêtes, configuration masquée, version, état du compte et chemins |
 | `/catalogs` | catalogues Stremio vus par le pont |
+| `/setup` (`POST /setup`, `POST /setup/logout`) | connexion au compte Stremio — **depuis le PC uniquement** (loopback, `Host` local, jeton de formulaire) ; voir [SECURITY.md](../SECURITY.md) |
+| `/dev` | (mode `--dev` seulement) liste des points de diagnostic |
 
 Aucun de ces points ne renvoie le mot de passe ni les URL d'addon en clair. Voir [SECURITY.md](../SECURITY.md) pour l'exposition réseau (`bindHost`).

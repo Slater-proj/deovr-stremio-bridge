@@ -9,21 +9,42 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    name: Release (tests + exe portable + publication)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - name: ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+          node-version: 24
       - name: La version du tag correspond à package.json
         run: |
           V=$(node -p "require('./package.json').version")
           [ "v$V" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != package.json $V"; exit 1; }
+      - name: ffmpeg
+        shell: pwsh
+        run: choco install ffmpeg --no-progress -y
       - run: npm run check
       - run: npm test
-      - run: npm run build
+      - name: Dossier de ffmpeg à embarquer
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem C:\ProgramData\chocolatey\lib\ffmpeg -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          if (-not $f -or -not (Test-Path (Join-Path $f.DirectoryName 'ffprobe.exe'))) { throw "ffmpeg.exe / ffprobe.exe introuvables" }
+          "FFMPEG_DIR=$($f.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Archive Node (variante avancée)
+        run: npm run build
+      - name: Exe portable
+        run: node scripts/build-exe.js --ffmpeg-dir "$FFMPEG_DIR"
+      - name: Test de fumée de l'exe
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\DeoVR-Stremio-Bridge-v*-windows-x64.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\portable"
+          node scripts/smoke-exe.js "$env:RUNNER_TEMP\portable\DeoVR-Stremio-Bridge"
       - name: Notes de la release (extrait du CHANGELOG)
         run: |
           V="${GITHUB_REF_NAME#v}"
@@ -32,7 +53,9 @@ jobs:
           {
             echo
             echo "---"
-            echo "**Installation** : téléchargez le zip ci-dessous, décompressez-le, double-clic sur \`INSTALL.bat\`, puis \`start.bat\`. Voir [docs/INSTALL.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/INSTALL.md)."
+            echo "**Installation** : téléchargez **\`DeoVR-Stremio-Bridge-${GITHUB_REF_NAME}-windows-x64.zip\`**, décompressez-le où vous voulez, double-clic sur \`DeoVR-Stremio-Bridge.exe\`. Aucune installation : Node.js et ffmpeg sont inclus, tout reste dans le dossier. Voir [docs/INSTALL.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/INSTALL.md)."
+            echo
+            echo "L'autre archive (\`deovr-stremio-bridge-…\`) est la variante pour utilisateurs avancés (Node.js à installer)."
           } >> notes.md
       - name: Créer la release
         env:

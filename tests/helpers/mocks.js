@@ -25,8 +25,17 @@ async function startMocks({ film, poster, cacheSize = 2147483648, filmSize, fast
     vr: [...Array(12)].map((_, i) => mk(i + 1, i % 3 === 0 ? '8K 3840p' : 'Les aventures de Zoe')),
     d3: [...Array(6)].map((_, i) => mk(i + 13, '3D SBS 4K')),
     dr: [...Array(6)].map((_, i) => mk(i + 19, 'Drame 1080p')) });
+  const api = { logins: [], collections: [], email: 'user@example.test', password: 'secret-pass-123', authKey: 'AUTHKEY_TEST_abc' };   // faux API du compte Stremio
   const addon = http.createServer((q, r) => {
     const u = decodeURIComponent(q.url.split('?')[0]), cat = catalogs(), all = Object.values(cat).flat();
+    if (q.method === 'POST' && u.startsWith('/api/')) {
+      let b = ''; q.on('data', c => b += c); q.on('end', () => {
+        let j = {}; try { j = JSON.parse(b); } catch {} r.setHeader('content-type', 'application/json');
+        if (u === '/api/login') { api.logins.push({ email: j.email }); return r.end(JSON.stringify(j.email === api.email && j.password === api.password ? { result: { authKey: api.authKey, user: { email: j.email } } } : { error: { message: 'Wrong passphrase', code: 5 } })); }
+        if (u === '/api/addonCollectionGet') { api.collections.push(j.authKey); return r.end(JSON.stringify(j.authKey === api.authKey ? { result: { addons: [{ transportUrl: addonBase + '/manifest.json', manifest: mani }] } } : { error: { message: 'Session does not exist', code: 1 } })); }
+        r.statusCode = 404; r.end('{}');
+      }); return;
+    }
     if (u === '/poster.jpg' && poster) { r.setHeader('content-type', 'image/jpeg'); return r.end(poster); }
     r.setHeader('content-type', 'application/json');
     if (u === '/manifest.json') return r.end(JSON.stringify(mani));
@@ -96,7 +105,7 @@ async function startMocks({ film, poster, cacheSize = 2147483648, filmSize, fast
   await new Promise(ok => udp.bind(0, '127.0.0.1', ok));
 
   return {
-    addonUrl: `${addonBase}/manifest.json`, stremioUrl: `http://127.0.0.1:${stremio.address().port}`, trackerHostPort: `127.0.0.1:${udp.address().port}`,
+    api, apiUrl: addonBase, addonUrl: `${addonBase}/manifest.json`, stremioUrl: `http://127.0.0.1:${stremio.address().port}`, trackerHostPort: `127.0.0.1:${udp.address().port}`,
     state, created, history, hashOf, SIZE,
     async close() { udp.close(); for (const s of sockets) { s.closeAllConnections && s.closeAllConnections(); await new Promise(ok => s.close(ok)); } },
   };

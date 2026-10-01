@@ -1,0 +1,17 @@
+Composants tiers inclus dans cette archive
+==========================================
+
+Node.js  (DeoVR-Stremio-Bridge.exe embarque l'environnement d'execution Node.js)
+  Licence MIT et licences des composants de Node.js : https://github.com/nodejs/node/blob/main/LICENSE
+  Code source : https://github.com/nodejs/node
+
+FFmpeg  (dossier ffmpeg\ : ffmpeg.exe et ffprobe.exe, programmes independants lances par le pont)
+  FFmpeg est un projet de FFmpeg developers. Cette construction est une construction Windows
+  distribuee sous licence GNU GPL v3 (voir ffmpeg\LICENSE.txt). Le pont l'execute comme un
+  programme separe ; il ne lui est pas lie. Le code source correspondant est disponible sur
+  https://ffmpeg.org/download.html (et https://github.com/FFmpeg/FFmpeg) ; les informations de
+  construction figurent dans la sortie de  ffmpeg\ffmpeg.exe -version .
+  Vous pouvez remplacer ffmpeg.exe / ffprobe.exe par votre propre version : le pont utilise
+  celle du dossier ffmpeg\ si elle existe, sinon celle du PATH Windows.
+
+Le pont lui-meme (DeoVR-Stremio Bridge) est sous licence MIT (fichier LICENSE).

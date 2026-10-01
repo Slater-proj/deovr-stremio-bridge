@@ -7,12 +7,13 @@ const freePort = () => new Promise(ok => { const s = net.createServer(); s.liste
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ffmpegAvailable = () => { try { return cp.spawnSync('ffmpeg', ['-version']).status === 0; } catch { return false; } };
 
-async function startBridge(mocks, config = {}) {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-test-')), port = await freePort();
-  fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ firstWaitMs: 1500, scanConcurrency: 3, ...config }));
+// opts : { login: true } -> pas d'ADDON_URLS : le pont passe par la (fausse) API du compte Stremio ; { dataDir } -> réutiliser un dossier (redémarrage) ; { env } -> variables en plus
+async function startBridge(mocks, config = {}, opts = {}) {
+  const dataDir = opts.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-test-')), port = await freePort();
+  if (!opts.dataDir || opts.config !== false) fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ firstWaitMs: 1500, scanConcurrency: 3, ...config }));
   let out = '';
-  const proc = cp.spawn(process.execPath, [path.join(root, 'bridge', 'server.js')], {
-    env: { ...process.env, PORT: String(port), BRIDGE_DATA_DIR: dataDir, ADDON_URLS: mocks.addonUrl, LOCAL_STREMIO: mocks.stremioUrl, SCRAPE_TRACKERS: mocks.trackerHostPort, DNS_MODE: 'system', DEBUG: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const proc = cp.spawn(process.execPath, [path.join(root, 'bridge', 'server.js'), '--no-browser'], {
+    env: { ...process.env, PORT: String(port), BRIDGE_DATA_DIR: dataDir, ...(opts.login ? { STREMIO_API: mocks.apiUrl } : { ADDON_URLS: mocks.addonUrl }), ...(opts.env || {}), LOCAL_STREMIO: mocks.stremioUrl, SCRAPE_TRACKERS: mocks.trackerHostPort, DNS_MODE: 'system', DEBUG: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   proc.stdout.on('data', d => out += d); proc.stderr.on('data', d => out += d);
   const t0 = Date.now(); while (!/Bridge prêt/.test(out)) { if (proc.exitCode !== null || Date.now() - t0 > 20000) throw new Error('le pont ne démarre pas :\n' + out.slice(-1500)); await sleep(100); }
   const base = `http://127.0.0.1:${port}`;
@@ -21,7 +22,7 @@ async function startBridge(mocks, config = {}) {
     json: async (p, init) => { const r = await fetch(base + p, init); const t = await r.text(); try { return JSON.parse(t); } catch { return t; } },
     get: (p, init) => fetch(base + p, init),
     async waitFor(fn, ms = 20000, every = 300) { const t = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t > ms) throw new Error('délai dépassé'); await sleep(every); } },
-    async stop() { proc.kill(); await new Promise(ok => { proc.once('exit', ok); setTimeout(ok, 2000); }); try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {} },
+    async stop({ keepData = false } = {}) { proc.kill(); await new Promise(ok => { proc.once('exit', ok); setTimeout(ok, 2000); }); if (!keepData) try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {} },
   };
   return api;
 }
