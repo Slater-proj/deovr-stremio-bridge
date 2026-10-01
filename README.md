@@ -57,7 +57,7 @@ More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | OS | Windows 10/11 (the code also runs on Linux/macOS, that is what CI covers) |
 | Stremio | desktop app running (streaming server on `127.0.0.1:11470`) with at least one addon |
 | DeoVR | PC version (Steam) |
-| Node.js | 20 or newer — `INSTALL.bat` installs it with winget |
+| Node.js | 20 or newer (CI runs the tests on Node 24 LTS) — `INSTALL.bat` installs it with winget |
 | ffmpeg | recommended — `INSTALL.bat` installs it; needed for MKV, the loading screen and thumbnails |
 | Stremio cache | Settings → Streaming → cache **unlimited or ≥ 20 GB** (VR films are huge) |
 
@@ -102,7 +102,7 @@ npm run check       # syntax check + configuration doc up to date
 npm run build       # builds dist/deovr-stremio-bridge-vX.Y.Z.zip
 ```
 
-CI runs on Ubuntu and Windows with Node 20, 22 and 24. Pushing a tag `vX.Y.Z` that matches `package.json` builds the zip and publishes a GitHub Release with the matching section of the changelog.
+CI runs the full test suite on Windows with Node 24 (about 4 minutes), plus a parallel job that builds the release zip and checks its content. Pushing a tag `vX.Y.Z` that matches `package.json` builds the zip and publishes a GitHub Release with the matching section of the changelog.
 
 ## Legal
 

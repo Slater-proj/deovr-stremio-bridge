@@ -14,65 +14,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Vérifications statiques
-    runs-on: ubuntu-latest
+  # Windows = la seule plateforme visée (DeoVR PC). Une seule version de Node : la 24 (LTS), celle qu'installe INSTALL.bat.
+  tests:
+    name: Tests (Windows, Node 24)
+    runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - run: npm run check
-
-  test:
-    name: Tests (${{ matrix.os }}, Node ${{ matrix.node }})
-    needs: check
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: [20, 22, 24]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node }}
-      - name: ffmpeg (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: ffmpeg (Windows)
-        if: runner.os == 'Windows'
+          node-version: 24
+      - name: ffmpeg
         run: choco install ffmpeg --no-progress -y
-      - name: Versions
-        run: |
-          node --version
-          ffmpeg -version
-        shell: bash
-      - name: Tests unitaires
-        run: npm run test:unit
-      - name: Tests d'intégration
-        run: npm run test:integration
+      - name: Vérifications statiques
+        run: npm run check
+      - name: Tests unitaires et d'intégration
+        run: npm test
 
-  package:
+  # En parallèle (n'allonge pas la durée) : fabrication du zip et contrôle de son contenu.
+  archive:
     name: Archive de release
-    needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
       - run: npm run build
       - name: Contrôle du contenu de l'archive
         run: |
           unzip -tq dist/*.zip
-          unzip -l dist/*.zip
           if unzip -l dist/*.zip | grep -E 'config\.json$|\.log$|diagnostic-report|rapport-support|bridge-state'; then echo "fichier local dans l'archive" && exit 1; fi
           unzip -p dist/*.zip 'deovr-stremio-bridge/start.bat' | file - | grep -q CRLF
-      - uses: actions/upload-artifact@v7
-        with:
-          name: deovr-stremio-bridge
-          path: dist/*.zip
-          if-no-files-found: error

@@ -52,11 +52,11 @@ describe('lecture : clic -> écran de chargement -> film', { skip: !HAS_FFMPEG &
   });
 
   test('tests de bascule 5 et 6 (sans torrent)', { timeout: 120000 }, async () => {
-    for (const kind of ['flat', 'sbs']) {
+    // deux sessions indépendantes (une par type) : on les joue en parallèle, sans attente entre les deux
+    await Promise.all(['flat', 'sbs'].map(async kind => {
       const r = await playHls(`${bridge.base}/test/switch/${kind}/index.m3u8`, { seconds: 40 });
-      assert.ok(r.loader >= 3, `${kind}: chargement`); assert.ok(r.real >= 2, `${kind}: film`); assert.ok(r.ended);
-      await sleep(26000);   // une nouvelle session est créée après 25 s sans playlist
-    }
+      assert.ok(r.loader >= 3, `${kind}: chargement`); assert.ok(r.real >= 2, `${kind}: film`); assert.ok(r.ended, `${kind}: ENDLIST`);
+    }));
   });
 });
 

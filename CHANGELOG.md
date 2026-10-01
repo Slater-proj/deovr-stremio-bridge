@@ -5,7 +5,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 ## [10.2.0] — 2026-10-01
 
 ### Ajouté
-- Dépôt public : tests unitaires et d'intégration (`node:test`), CI GitHub Actions (Linux + Windows, Node 20/22/24), fabrication de la release, documentation complète.
+- Dépôt public : tests unitaires et d'intégration (`node:test`), CI GitHub Actions (Windows, Node 24 ; un job parallèle contrôle le zip de release), fabrication de la release, documentation complète.
 - Reprise automatique de ffmpeg après plantage (jusqu'à 3 fois), à la bonne position, avec discontinuité HLS signalée.
 - Élagage des segments déjà vus quand le disque est presque plein (`minFreeGB`, `trimKeepSec`).
 - Budget du cache Stremio : pas plus de films actifs que le cache ne peut en contenir.
