@@ -19,7 +19,7 @@ describe('bundle de l\'exe', () => {
 
   test('--version et --help', () => {
     const env = { ...process.env, BRIDGE_APP_DIR: app };
-    let r = cp.spawnSync(process.execPath, runner(['--version']), { encoding: 'utf8', env }); assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout.trim(), pkg.version);
+    let r = cp.spawnSync(process.execPath, runner(['--version']), { encoding: 'utf8', env }); assert.equal(r.status, 0, r.stderr); assert.ok(r.stdout.trim().startsWith(pkg.version), `--version = ${r.stdout.trim()}`); // en CI : suffixe de build « -dev.N.sha (commit, date) »
     r = cp.spawnSync(process.execPath, runner(['--help']), { encoding: 'utf8', env }); assert.ok(r.stdout.includes('--dev'));
     assert.deepEqual(fs.readdirSync(app), [], 'rien d\'écrit par --version / --help');
   });
