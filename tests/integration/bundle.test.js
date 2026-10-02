@@ -35,7 +35,9 @@ describe('bundle de l\'exe', () => {
       assert.equal(dbg.chemins.mode, 'portable'); assert.equal(path.resolve(dbg.chemins.donnees), path.join(app, 'data')); assert.equal(dbg.chemins.application, app);
       assert.equal((await fetch(`http://127.0.0.1:${port}/setup`)).status, 200); assert.equal((await fetch(`http://127.0.0.1:${port}/dev`)).status, 200);
       assert.ok(fs.existsSync(path.join(app, 'data', 'bridge-debug.log')));
-      assert.deepEqual(fs.readdirSync(app).sort(), ['data'], 'aucun autre fichier dans le dossier de l\'exe');
+      assert.deepEqual(fs.readdirSync(app).sort(), ['config.json', 'data'], 'seuls config.json et data\\ sont créés à côté de l\'exe');
+      const cj = JSON.parse(fs.readFileSync(path.join(app, 'config.json'), 'utf8')); assert.equal(cj.port, 4477); assert.ok(cj._aide); assert.ok(!('email' in cj) && !('password' in cj));
+      assert.equal(path.resolve(dbg.chemins.reglages), path.join(app, 'config.json'));
     } finally { p.kill(); await sleep(300); }
   });
 });

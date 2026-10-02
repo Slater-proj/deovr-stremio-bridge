@@ -12,7 +12,7 @@ Pont local **DeoVR ⇄ Stremio** : un serveur HTTP Node.js sans dépendance. Le 
 ## Où est quoi
 - `bridge/lib.js` : le moteur (config `cfg`, bibliothèque DeoVR, registre « En cours », téléchargements, pipeline HLS/ffmpeg, diagnostic). `bridge/server.js` : démarrage et ligne de commande (`--dev`, `--login`, `--report`…). `bridge/paths.js` : où vivent les données. `bridge/auth.js` + `bridge/secrets.js` : compte Stremio (`/setup`, clé chiffrée DPAPI). `bridge/version.js` : version. `bridge/*.bat` : scripts de la variante Node (CRLF).
 - `packaging/windows/` : fichiers livrés avec l'exe portable. `scripts/build-exe.js` (exe + zip), `scripts/smoke-exe.js` (test de l'exe réel).
-- Données : exe → `<dossier de l'exe>\data` ; source → dossier du code ; repli `%APPDATA%\DeoVR-Stremio-Bridge`. Fichiers temporaires dans `data\tmp`. Ne jamais écrire ailleurs (`os.tmpdir()` interdit : utiliser `cfg.tempDir`).
+- Fichiers de l'exe : `config.json` (réglages utilisateur, créé par `bridge/settings.js`) à côté de l'exe ; `data\` (données) ; `resources\` (ffmpeg, vidéos de test) ; `utility\` et `docs\DEBUG.txt` seulement dans le zip debug (sources dans `packaging/windows/`). Source node → dossier du code ; repli `%APPDATA%\DeoVR-Stremio-Bridge`. Port par défaut 4477. Fichiers temporaires dans `data\tmp`. Ne jamais écrire ailleurs (`os.tmpdir()` interdit : utiliser `cfg.tempDir`).
 - `docs/ARCHITECTURE.md` : le fonctionnement détaillé. `docs/CONFIGURATION.md` est **généré** (`npm run docs`) depuis les commentaires de `cfg`.
 - `tests/unit` (fonctions pures), `tests/integration` (vrai pont + faux addon / faux Stremio / faux tracker, ffmpeg requis). `tests/helpers/` : les simulations.
 - `scripts/` : `check.js` (contrôles statiques), `run-tests.js`, `make-release.js` (zip), `bump.js` (changement de version), `gen-config-doc.js`.
@@ -28,5 +28,5 @@ Modifier → `npm run check && npm test` → push → la CI teste sous Windows, 
 - Ne pas casser le test de fumée : il vérifie `data\` à côté de l'exe et que rien n'est écrit dans `%APPDATA%`.
 - Les `.bat` doivent rester en CRLF (`.gitattributes`, `make-release.js`).
 - Texte `drawtext` d'ffmpeg : le caractère `%` doit être neutralisé (`expansion=none`).
-- DeoVR : adresse nue → `/deovr` ; vignettes en paysage ; codecs Windows HEVC/H.264 ; la bascule HLS écran de chargement → film n'est confirmée que par les tests 5 et 6 sur un vrai casque.
+- DeoVR : adresse nue → `/deovr` ; vignettes en paysage ; la bascule HLS écran de chargement → film est confirmée au casque pour le **H.264** seulement. **Mesuré (02/10) : un flux HLS en HEVC est relancé par le lecteur Windows exactement 15 s après son début** → jamais de HEVC dans le HLS (écran de chargement H.264, puis lecture directe pour les films HEVC, `hevcDirect`). Le banc de test `bridge/lab.js` (Labo 1 à 6, `/debug/labo`) sert à confirmer ce qui reste incertain (HEVC en fMP4, `path`) : ne pas supposer, relire ses verdicts.
 - Les fichiers `.git/index.lock` laissés par un outil externe bloquent git : les supprimer à la main.

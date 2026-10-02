@@ -7,15 +7,16 @@ const { Readable } = require('stream');
 // ---------- Configuration ----------
 let file = {};
 const PATHS = require('./paths').resolve();   // exe : <dossier de l'exe>\data ; node server.js : dossier du code ; BRIDGE_DATA_DIR / --data-dir : imposé (voir paths.js)
-const DATA_DIR = PATHS.dataDir, APP_DIR = PATHS.appDir;   // DATA_DIR : config.json, clé Stremio chiffrée, journaux, état, temporaires
-try { file = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'config.json'), 'utf8')); } catch {}
+const DATA_DIR = PATHS.dataDir, APP_DIR = PATHS.appDir, RES_DIR = PATHS.resDir;   // DATA_DIR : clé Stremio chiffrée, journaux, état, temporaires ; RES_DIR : ffmpeg et vidéos de test
+let configError = '';
+try { file = JSON.parse(fs.readFileSync(PATHS.configFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') configError = e.message; }   // config.json illisible : signalé au démarrage (server.js)
 const env = process.env;
 try { if (env.IPV4_FIRST !== '0') require('dns').setDefaultResultOrder('ipv4first'); } catch {}
 const cfg = {
-  port: +(env.PORT || file.port || 8080),
+  port: +(env.PORT || file.port || 4477),   // port du pont, 4477 par défaut (peu courant : 8080 est pris par beaucoup de logiciels) ; --port N ou la variable PORT l'emportent
   bindHost: env.BIND_HOST || file.bindHost || '0.0.0.0',   // '127.0.0.1' = accessible uniquement depuis ce PC (PCVR) ; '0.0.0.0' = aussi depuis le réseau local (casque autonome)
-  email: env.STREMIO_EMAIL || file.email || '',
-  password: env.STREMIO_PASSWORD || file.password || '',
+  email: env.STREMIO_EMAIL || file.email || '',   // ANCIEN réglage, inutile : la connexion se fait par la page /setup ; migré puis effacé s'il est présent avec password
+  password: env.STREMIO_PASSWORD || file.password || '',   // ANCIEN réglage (voir email) : jamais réécrit par le pont
   authKey: env.STREMIO_AUTHKEY || file.authKey || '',
   addonUrls: file.addonUrls || (env.ADDON_URLS ? env.ADDON_URLS.split(',') : []), // optionnel : manifests en dur (tests)
   localStremio: (env.LOCAL_STREMIO || file.localStremio || 'http://127.0.0.1:11470').replace(/\/$/, ''),
@@ -37,7 +38,7 @@ const cfg = {
   healthCheckMs: file.healthCheckMs ?? 10000,     // test de santé des torrents avant de les proposer (0 = désactivé)
   torrentStartMs: +(env.TORRENT_START_MS || file.torrentStartMs || 120000),   // au-delà, le relais répond 504 au lieu de laisser DeoVR charger à l'infini
   platform: (env.DEOVR_PLATFORM || file.platform || 'windows').toLowerCase(),   // 'windows' (DeoVR PC : MP4/MOV/AVI, pas MKV/AV1/VP9) ou 'quest' (MKV/WebM/AV1 ok)
-  ffmpeg: file.ffmpeg || env.FFMPEG || ['ffmpeg.exe', 'ffmpeg'].map(n => path.join(APP_DIR, 'ffmpeg', n)).find(f => fs.existsSync(f)) || 'ffmpeg',   // pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV)
+  ffmpeg: file.ffmpeg || env.FFMPEG || [RES_DIR, APP_DIR].flatMap(d => ['ffmpeg.exe', 'ffmpeg'].map(n => path.join(d, 'ffmpeg', n))).find(f => fs.existsSync(f)) || 'ffmpeg',   // pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV)
   remux: file.remux ?? true,
   localDirs: file.localDirs || (env.LOCAL_DIRS ? env.LOCAL_DIRS.split(';').filter(Boolean) : []),   // dossiers de vidéos sur ce PC (onglet « Mes vidéos »)
   showHealth: file.showHealth ?? true,            // pastille de santé dans le titre
@@ -58,7 +59,7 @@ const cfg = {
   minBufferSec: file.minBufferSec ?? 20,           // tampon minimum (secondes de film converties) avant de passer de l'écran de chargement au film
   maxAheadMin: file.maxAheadMin ?? 30,             // ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur
   maxAheadMB: file.maxAheadMB ?? 4000,             // ... ni plus de N Mo de segments temporaires d'avance (films 8K très lourds)
-  firstWaitMs: file.firstWaitMs ?? 3000,           // attente max avant de répondre à la 1re demande du lecteur : si le film est prêt avant, il démarre sans écran de chargement
+  firstWaitMs: file.firstWaitMs ?? 0,              // attente max avant de répondre à la 1re demande du lecteur (0 = l'écran de chargement apparaît tout de suite)
   patientMaxMin: file.patientMaxMin ?? 45,         // débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance
   landscapeThumbs: file.landscapeThumbs ?? true,   // vignettes 16:9 composées (DeoVR affiche en paysage) ; false = affiche Stremio brute
   stremioPingMs: file.stremioPingMs ?? 15000,      // fréquence du test « Stremio répond-il ? »
@@ -68,13 +69,14 @@ const cfg = {
   trimKeepSec: file.trimKeepSec ?? 300,            // ... en gardant ce nombre de secondes derrière le lecteur
   loaderMaxMin: file.loaderMaxMin ?? 30,           // l'écran de chargement s'arrête après N min sans aucune donnée
   loadingScreen: file.loadingScreen ?? 'always',   // écran de chargement HLS à CHAQUE clic sur un torrent : 'always' | 'auto' (seulement si pas déjà prêt) | 'off'
-  loadingCodec: file.loadingCodec || 'auto',       // codec de l'écran d'attente : auto (HEVC si film 6K+), h264, hevc
+  hevcDirect: file.hevcDirect ?? true,             // film non H.264 (HEVC...) : le lecteur DeoVR ne le décode pas dans un flux HLS -> écran de chargement, puis lecture directe au clic suivant (true) ou tentative HLS (false)
+  loadingCodec: file.loadingCodec || 'h264',       // codec de l'écran d'attente : h264 (seul codec que le lecteur DeoVR/Windows décode dans un flux HLS : mesuré au casque) ; hevc seulement pour des essais
   asciiBadges: file.asciiBadges ?? true,           // DeoVR n'affiche pas les emoji dans ses listes : pastilles en texte [+++] [++] [+] [x] [?]
   jsonDeadlineMs: file.jsonDeadlineMs ?? 8000,     // DeoVR abandonne une fiche vidéo après ~10 s : on répond toujours avant
   dnsMode: (env.DNS_MODE || file.dnsMode || 'auto').toLowerCase(),   // auto : DNS du PC puis DNS public si échec | public : DNS public d'abord | system : DNS du PC seulement
   publicDns: file.publicDns || ['1.1.1.1', '8.8.8.8', '9.9.9.9'],
-  debug: !!(env.DEBUG || file.debug || env.BRIDGE_DEV),
-  dev: !!env.BRIDGE_DEV,                          // mode développeur (--dev) : journaux détaillés, ffmpeg bavard, page /dev
+  debug: !!(env.DEBUG || file.debug || env.BRIDGE_DEV || file.dev),
+  dev: !!(env.BRIDGE_DEV || file.dev),                          // mode développeur (--dev, ou "dev": true dans config.json) : journaux détaillés, ffmpeg bavard, page /dev
   stremioApi: (env.STREMIO_API || file.stremioApi || 'https://api.strem.io').replace(/\/$/, ''),   // API du compte Stremio (changer seulement pour les tests)
   tempDir: env.BRIDGE_TMP || file.tempDir || path.join(DATA_DIR, 'tmp'),   // vignettes et segments de lecture (peut être placé sur un autre disque)
 };
@@ -261,7 +263,7 @@ const unb64u = s => Buffer.from(s, 'base64url').toString();
 
 // ---------- Stremio : addons du compte ----------
 let loginNeeded = false;   // vrai tant que le compte Stremio n'est pas connecté (message dans « En cours » ; page /setup)
-const auth = require('./auth')({ cfg, log, dataDir: DATA_DIR,
+const auth = require('./auth')({ cfg, log, dataDir: DATA_DIR, configFile: PATHS.configFile,
   post: (url, body) => getJson(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   onChange: () => { cache.clear(); failCache.clear(); loginNeeded = false; } });
 async function getAddons() {
@@ -339,24 +341,24 @@ function listCatalogs(addons, why) {
 }
 
 const catalogMetas = new Map();
-async function fetchCatalog(entry, query, skip = 0) {
+async function fetchCatalog(entry, query, skip = 0, patient = false) {
   const { addon, cat } = entry;
   const extra = [];
   if (entry.genre) extra.push(`genre=${encodeURIComponent(entry.genre)}`);
   if (query) extra.push(`search=${encodeURIComponent(query)}`);
   if (skip) extra.push(`skip=${skip}`);
   const url = `${addon.base}/catalog/${cat.type}/${encodeURIComponent(cat.id)}${extra.length ? '/' + extra.join('&') : ''}.json`;
-  const data = await cached(url, cfg.cacheMinutes * 60000, () => getJson(url, { signal: AbortSignal.timeout(cfg.catalogTimeoutMs) }));
+  const data = await cached(url, cfg.cacheMinutes * 60000, () => getJson(url, { signal: AbortSignal.timeout(cfg.catalogTimeoutMs * (patient ? 4 : 1)) }));   // patient : relance en arrière-plan d'un addon lent
   for (const m of data.metas || []) if (m && m.id) { catalogMetas.set(m.id, m); noteCat(m.id, entry); }
   return data.metas || [];
 }
 // Première page + pages suivantes (skip) si le catalogue en propose
-async function fetchCatalogPages(entry, query) {
-  const first = await fetchCatalog(entry, query);
+async function fetchCatalogPages(entry, query, patient = false) {
+  const first = await fetchCatalog(entry, query, 0, patient);
   const supportsSkip = catalogExtra(entry.cat).some(e => e.name === 'skip');
   if (query || !supportsSkip || first.length < 10 || cfg.pagesPerTab < 2) return first;
   const rest = await Promise.all(Array.from({ length: cfg.pagesPerTab - 1 }, (_, i) =>
-    fetchCatalog(entry, query, first.length * (i + 1)).catch(() => [])));
+    fetchCatalog(entry, query, first.length * (i + 1), patient).catch(() => [])));
   return first.concat(...rest);
 }
 
@@ -406,9 +408,8 @@ function tagInfo(m) {
   if (D) { const s = dlState(D); return { label: s.label, cls: s.cls, dl: true }; }
   const h = filmHealth.get(m.id);
   if (!h) return (isVR(m, '') || cfg.scanAll) ? { label: 'S?', cls: 'u' } : null;
-  const rl = resLabel(h.res || detectRes(m.name));
   const S = h.http ? 'HTTP' : (h.level < 0 && !h.seeders) ? 'S?' : 'S' + (h.seeders || 0);
-  return { label: [rl, S].filter(Boolean).join(' '), cls: h.http ? 'g' : ({ 3: 'g', 2: 'o', 1: 'r', 0: 'k' }[h.level] || 'u') };
+  return { label: S, cls: h.http ? 'g' : ({ 3: 'g', 2: 'o', 1: 'r', 0: 'k' }[h.level] || 'u') };
 }
 const DOT = { g: '🟢', o: '🟠', r: '🔴', k: '⚫', u: '⚪', b: '🔵' };
 function healthTag(m, html) {
@@ -474,8 +475,10 @@ const TESTS = {
   'bascule-sbs': { title: 'Test 6 · Chargement puis vidéo 3D (bascule, taille différente)', file: 'test-3d-sbs.mp4', stereo: 'sbs', hls: 'sbs' },
   'empty': { title: 'Aucun film en cours', file: 'test-2d.mp4', stereo: 'off', hidden: true },   // renvoyé par l'onglet « En cours » vide ; absent de l'onglet Test
 };
+let labInst = null;   // banc de test casque (bridge/lab.js), créé à la première utilisation
+const lab = () => labInst || (labInst = require('./lab').create({ cfg, log, serveLocal, font: FONT, escF, ffmpegOk, hevcOk: hevcEnc === 'libx265', thumb: base => `${base}/test/thumb.jpg` }));
 function testScene(base) {
-  return { name: 'Test pont', list: Object.entries(TESTS).filter(([, t]) => !t.hidden).map(([k, t]) => ({ title: t.title, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/${k}.json` })) };
+  return { name: 'Test pont', list: [...Object.entries(TESTS).filter(([, t]) => !t.hidden).map(([k, t]) => ({ title: t.title, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/${k}.json` })), ...(ffmpegOk ? lab().items(base) : [])] };
 }
 function testVideo(key, base) {
   const t = TESTS[key]; if (!t) return null;
@@ -484,7 +487,7 @@ function testVideo(key, base) {
   return { id: 9000 + Object.keys(TESTS).indexOf(key), title: t.title, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, screenType: 'flat', stereoMode: t.stereo, is3d: t.stereo !== 'off', encodings: [{ name: 'h264', videoSources: [{ resolution: t.stereo === 'sbs' ? 1080 : 1080, url }] }] };
 }
 function serveTestFile(req, res, name) {
-  const f = path.join(APP_DIR, 'test', path.basename(name));
+  const f = path.join(RES_DIR, 'test', path.basename(name));
   if (!/^[\w.-]+$/.test(name) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   const ext = path.extname(f).toLowerCase();
   return serveLocal(req, res, f, { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.jpg': 'image/jpeg' }[ext] || 'application/octet-stream');
@@ -579,13 +582,23 @@ function hqMetas(limit = 60) {   // « Haute qualité » : d'après le TITRE ou 
   return vrPool().filter(m => { const h = filmHealth.get(m.id); return (h && h.res >= 2160) || detectRes(m.name) >= 2160; }).slice(0, limit);
 }
 function sceneOf(name, metas, base) { if (!metas.length) return null; queueScans(metas.slice(0, 40), name, base); return { name, list: metas.map(m => metaToItem(m, base)) }; }
+const slowRetry = new Map();   // nom du catalogue -> dernière relance en arrière-plan
 async function catalogScenes(query, max) {   // [{ name, metas }] (réutilisé par la bibliothèque DeoVR et par /ui)
   const addons = await getAddons();
-  const entries = listCatalogs(addons).filter(e => (query ? e.search : !e.search)).slice(0, max || cfg.maxTabs);
-  return (await Promise.all(entries.map(async e => {
+  const entries = listCatalogs(addons).filter(e => (query ? e.search : !e.search)).slice(0, max || cfg.maxTabs), failed = [];
+  const res = (await Promise.all(entries.map(async e => {
     try { return { name: e.name, metas: await fetchCatalogPages(e, query) }; }
-    catch (err) { log('warn', `catalogue ignoré « ${e.name} » : ${err.message}`); return null; }
+    catch (err) {
+      failed.push(e.name); log('debug', `catalogue ignoré « ${e.name} » : ${err.message}`);
+      const k = e.name + '|' + (query || ''); if (!query && Date.now() - (slowRetry.get(k) || 0) > 5 * 60000) {   // addon lent : on réessaie en arrière-plan avec plus de patience, l'onglet apparaîtra au prochain affichage
+        slowRetry.set(k, Date.now());
+        setTimeout(() => fetchCatalogPages(e, query, true).then(() => log('info', `catalogue « ${e.name} » : chargé (addon lent), disponible au prochain affichage`)).catch(er => log('debug', `catalogue « ${e.name} » : toujours en échec (${er.message})`)), 500).unref();
+      }
+      return null;
+    }
   }))).filter(Boolean);
+  if (failed.length) log('warn', `${failed.length} catalogue(s) trop lent(s) ou en panne, ignoré(s) pour cet affichage (addon externe, pas le pont) : ${failed.join(', ')}. Nouvelle tentative en arrière-plan.`);
+  return res;
 }
 async function buildLibrary(base, query) {
   let scenes = [];
@@ -999,18 +1012,21 @@ async function buildVideo(type, id, base, reqHost, platform, ua) {
     const hh = o.raw.infoHash.toLowerCase(), ix = Number.isInteger(o.raw.fileIdx) ? o.raw.fileIdx : -1, key = `${hh}:${ix}`;
     hashFilm.set(hh, id);
     if (filmInfo.size > 5000) filmInfo.clear();
-    filmInfo.set(key, { id, type, title: name, poster, runtime, screen: a.best.screenType, stereo: a.best.stereoMode, res: o.resolution, vrWhy: a.vrWhy, fmtReason: a.best.fmtReason, size: o.size || 0, need: o.size && runtime ? o.size / runtime : 0 });
+    const directOk = !o.remuxed && o.platformOk !== false;   // le fichier est lisible tel quel par DeoVR (ni MKV à convertir, ni codec refusé)
+    filmInfo.set(key, { id, type, title: name, poster, runtime, screen: a.best.screenType, stereo: a.best.stereoMode, res: o.resolution, vrWhy: a.vrWhy, fmtReason: a.best.fmtReason, size: o.size || 0, need: o.size && runtime ? o.size / runtime : 0, directOk });
     relayState.set(hh, { ...(relayState.get(hh) || {}), title: name, length: runtime });
-    const D = dls.get(key); if (D) Object.assign(D, { title: name, poster: poster || D.poster, runtime: runtime || D.runtime });
+    const D = dls.get(key); if (D) Object.assign(D, { title: name, poster: poster || D.poster, runtime: runtime || D.runtime, directOk });
     // chaque clic sur un torrent passe par l'écran de chargement (sauf codec que DeoVR PC ne sait pas lire)
-    if (liveOk && o.platformOk !== false && (cfg.loadingScreen === 'always' || o.remuxed || !(D && D.live && D.live.realReady))) {
+    const ready = D && D.live && !D.live.closed && D.live.realReady;
+    if (ready && D.live.direct && directOk) { o.live = false; o.direct = true; }   // film HEVC déjà en tampon : le lecteur lit le fichier directement (comme avant l'écran de chargement), il démarre aussitôt
+    else if (liveOk && o.platformOk !== false && (cfg.loadingScreen === 'always' || o.remuxed || !ready)) {
       o.url = `${base}/live/${hh}/${ix}/index.m3u8`; o.live = true; o.platformOk = true;
     }
   }
   const byRes = new Map();   // une source par résolution (la plus saine d'abord) ; nom d'encodage "h264" : seule valeur documentée par DeoVR
   for (const o of ordered) { if (o.platformOk === false && ordered.some(x => x.platformOk !== false)) continue; const k = o.resolution || 1080; if (!byRes.has(k)) byRes.set(k, { resolution: k, url: o.url }); }
   const sources = [...byRes.values()].sort((x, y) => y.resolution - x.resolution);
-  const hash = [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
+  const hash = [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 1013);   // DeoVR mémorise les réglages d'une vidéo par son « id » : ce nouveau départ efface ceux gardés par d'anciens essais ratés (mode d'affichage)
   const metaObj = catalogMetas.get(id) || { id, name };
   const v = {
     id: Math.abs(hash),
@@ -1096,7 +1112,7 @@ function addRead(D, n, kind) {   // octets réellement reçus du serveur Stremio
 function newDl(key, hash, idx) {
   const fi = filmInfo.get(key) || {};
   return { key, hash, idx: +idx, id: fi.id || hashFilm.get(hash) || hash.slice(0, 8), type: fi.type || 'movie', title: fi.title || (relayState.get(hash) || {}).title || hash.slice(0, 8), poster: fi.poster || '', runtime: fi.runtime || 0,
-    screen: fi.screen, stereo: fi.stereo, res: fi.res, vrWhy: fi.vrWhy, fmtReason: fi.fmtReason, size: fi.size || 0, need: fi.need || 0,
+    screen: fi.screen, stereo: fi.stereo, res: fi.res, vrWhy: fi.vrWhy, fmtReason: fi.fmtReason, size: fi.size || 0, need: fi.need || 0, directOk: fi.directOk,
     created: Date.now(), lastPlayer: 0, active: false, clicks: 0, episodes: [], timeline: [], samples: [], reads: [], readBytes: 0, directBytes: 0, netBytes: 0, peers: 0, conns: 0, speed: 0, netSpeed: 0, readSpeed: 0, meta: false, progress: 0, maxPos: 0, bgPos: 0, bgBytes: 0 };
 }
 // appelé à CHAQUE demande du lecteur (playlist, segment, flux direct) : déclenche puis maintient le téléchargement
@@ -1104,7 +1120,7 @@ function dlTouch(hash, idx, what, req) {
   const key = `${hash}:${idx}`, now = Date.now();
   let D = dls.get(key);
   if (!D) { D = newDl(key, hash, idx); dls.set(key, D); dlByFilm.set(D.id, D); }
-  else { const fi = filmInfo.get(key); if (fi) { D.title = fi.title || D.title; D.poster = fi.poster || D.poster; D.runtime = fi.runtime || D.runtime; D.screen = fi.screen || D.screen; D.stereo = fi.stereo || D.stereo; D.res = fi.res || D.res; D.vrWhy = fi.vrWhy || D.vrWhy; D.fmtReason = fi.fmtReason || D.fmtReason; D.size = D.size || fi.size || 0; D.need = D.need || fi.need || 0; } }
+  else { const fi = filmInfo.get(key); if (fi) { D.title = fi.title || D.title; D.poster = fi.poster || D.poster; D.runtime = fi.runtime || D.runtime; D.screen = fi.screen || D.screen; D.stereo = fi.stereo || D.stereo; D.res = fi.res || D.res; D.vrWhy = fi.vrWhy || D.vrWhy; D.fmtReason = fi.fmtReason || D.fmtReason; D.size = D.size || fi.size || 0; D.need = D.need || fi.need || 0; if (fi.directOk !== undefined) D.directOk = fi.directOk; } }
   const idle = now - D.lastPlayer;
   if (!D.cur || idle > 45000) dlEpisode(D, what, req);
   D.lastPlayer = now; D.cur.lastT = now;
@@ -1146,7 +1162,7 @@ function dlState(D) {   // { code, label (court, ASCII+Latin-1 : affiché dans l
   const now = Date.now(), age = now - (D.activatedAt || now), sp = D.speed || 0, s = D.live;
   if (!D.active) return { code: 'pause', label: D.bgDone ? 'EN CACHE · COMPLET' : 'PAUSE · reprise au clic', cls: 'b' };
   if (D.bgDone || (D.size && D.maxPos >= D.size - 1)) return { code: 'complete', label: 'PRÊT · COMPLET', cls: 'g' };
-  if (s && !s.closed && s.realReady) return { code: 'ready', label: `PRÊT · ${fmtDur(aheadSec(s))} en tampon`, cls: 'g' };
+  if (s && !s.closed && s.realReady) return { code: 'ready', label: s.direct ? 'PRÊT · relancez le film' : `PRÊT · ${fmtDur(aheadSec(s))} en tampon`, cls: 'g' };
   const got = D.readBytes > 0 || D.netBytes > 0;
   if (!D.meta && !got) return (age > 60000 && D.peers === 0) ? { code: 'stuck', label: 'BLOQUÉ · 0 pair', cls: 'r' } : { code: 'search', label: `RECHERCHE · ${D.peers} pair${D.peers > 1 ? 's' : ''}`, cls: 'o' };
   if (!got) return age > 90000 ? { code: 'stuck', label: 'BLOQUÉ · 0 donnée', cls: 'r' } : { code: 'meta', label: 'MÉTADONNÉES OK · en attente', cls: 'o' };
@@ -1193,11 +1209,11 @@ function dlBilan(D, why) {   // une ligne de bilan par épisode : lu / quitté p
   const dur = Math.max(0, Math.round((e.lastT - e.t0) / 1000)), got = D.readBytes > 0 || D.netBytes > 0, s = D.live;
   const played = e.realSegs > 0 || e.direct > 0, before = D.episodes.filter(x => x !== e && x.t0 < e.t0);
   let verdict;
-  if (played) verdict = before.length ? 'lu (quitté puis repris)' : 'lu';
-  else if (e.loaderSegs > 0) verdict = `abandonné par DeoVR après ${dur} s (${s && s.realReady ? 'film prêt mais la bascule n\'a pas été suivie' : 'film pas encore prêt'})`;
+  if (played) verdict = (before.length ? 'lu (quitté puis repris)' : 'lu') + (e.opens && e.opens.length > 1 ? ` — MAIS le lecteur a redémarré le flux ${e.opens.length - 1} fois (à +${e.opens.slice(1).join(' s, +')} s)` : '');
+  else if (e.loaderSegs > 0) verdict = (e.opens && e.opens.length > 1 ? `flux redémarré ${e.opens.length - 1} fois par DeoVR (à +${e.opens.slice(1).join(' s, +')} s) : ` : '') + `abandonné par DeoVR après ${dur} s (${s && s.realReady ? 'film prêt mais la bascule n\'a pas été suivie' : 'film pas encore prêt'})`;
   else verdict = got ? 'rien lu (le lecteur a quitté avant toute donnée)' : 'aucune donnée';
   if (!played && !got) verdict = 'aucune donnée' + (e.loaderSegs ? ` (écran de chargement vu ${dur} s)` : '');
-  const b = { t: new Date().toISOString(), film: D.title, id: D.id, clic: e.n, verdict, raison_fin: why, duree_s: dur, ecran_chargement_segments: e.loaderSegs, segments_film: e.realSegs, octets_directs: e.direct, bascule: e.switched, pairs: D.peers, recu_Mo: +(Math.max(D.readBytes, D.netBytes) / 1e6).toFixed(1), debit_MoS: +(D.speed / 1e6).toFixed(2), necessaire_MoS: D.need ? +(D.need / 1e6).toFixed(2) : null, tampon_s: s ? Math.round(s.producedSec || 0) : null, format: `${D.screen || '?'}/${D.stereo || '?'}`, raison_format: D.fmtReason || null, etat: dlState(D).label };
+  const b = { t: new Date().toISOString(), film: D.title, id: D.id, clic: e.n, verdict, raison_fin: why, duree_s: dur, ecran_chargement_segments: e.loaderSegs, segments_film: e.realSegs, octets_directs: e.direct, bascule: e.switched, ouvertures_du_flux_a_s: e.opens || [], pairs: D.peers, recu_Mo: +(Math.max(D.readBytes, D.netBytes) / 1e6).toFixed(1), debit_MoS: +(D.speed / 1e6).toFixed(2), necessaire_MoS: D.need ? +(D.need / 1e6).toFixed(2) : null, tampon_s: s ? Math.round(s.producedSec || 0) : null, format: `${D.screen || '?'}/${D.stereo || '?'}`, raison_format: D.fmtReason || null, etat: dlState(D).label };
   bilans.push(b); if (bilans.length > 40) bilans.shift();
   try { fs.appendFileSync(BILAN_FILE, JSON.stringify(b) + '\n'); } catch {}
   dlLog(D, 'info', `BILAN clic n°${e.n} : ${verdict} — ${dur} s, ${b.recu_Mo} Mo reçus, pairs ${b.pairs}, tampon ${b.tampon_s ?? '-'} s`);
@@ -1303,7 +1319,16 @@ function liveStart(D) {
       const segs = []; let d = 0; for (const l of txt.split('\n')) { const m = /^#EXTINF:([\d.]+)/.exec(l); if (m) d = +m[1]; else if (/^seg\d+\.ts$/.test(l.trim())) segs.push([l.trim(), d]); }
       s.curSegs = segs; s.realSegs = s.base.concat(segs); s.producedSec = s.baseSec + segs.reduce((a, x) => a + x[1], 0);
       s.T = bufferTarget(D);
-      if (!s.realReady && s.realSegs.length >= 2 && (s.producedSec >= s.T || s.realDone)) { s.realReady = true; s.readyAt = Date.now(); dlLog(D, 'info', `VRAI FILM PRÊT après ${Math.round((Date.now() - s.t0) / 1000)} s : ${s.realSegs.length} segments, ${Math.round(s.producedSec)} s de tampon (cible ${s.T} s, débit ${mbs(D.speed)} pour ${D.need ? mbs(D.need) : '?'} nécessaires) -> bascule au prochain rafraîchissement de la playlist`); }
+      // pas de « prêt » avant d'avoir MESURÉ le débit (≥ 12 s) : sinon la cible de tampon est calculée sans débit (20 s seulement) et la lecture cale dès que ces 20 s sont consommées
+      const speedKnown = s.realDone || D.bgDone || (D.size && D.maxPos >= D.size - 1) || Date.now() - (D.activatedAt || s.t0) > 12000;
+      if (!s.realReady && speedKnown && s.realSegs.length >= 2 && (s.producedSec >= s.T || s.realDone)) {
+        s.realReady = true; s.readyAt = Date.now();
+        vidInvalidate(D.id);
+        s.direct = !!(cfg.hevcDirect && D.directOk !== false && s.codec && !/^h264\b/i.test(s.codec));   // seul le H.264 passe dans un flux HLS du lecteur DeoVR/Windows (HEVC : mesuré, redémarrage à 15 s)
+        if (s.direct) { s.handover = true; try { s.proc.kill(); } catch {} setTimeout(() => { try { fs.rmSync(path.join(dir, 'real'), { recursive: true, force: true }); } catch {} }, 2000); dlLog(D, 'info', `film ${s.codec.split(' ')[0].toUpperCase()} : le lecteur DeoVR ne le lit pas dans un flux HLS -> l'écran de chargement affiche « PRÊT, relancez le film », puis lecture directe du fichier (déjà en tampon chez Stremio)`); }
+        else if (/^(hevc|av1|vp9)/i.test(s.codec || '')) dlLog(D, 'warn', `film ${s.codec.split(' ')[0]} envoyé en HLS (fichier MKV à convertir ou hevcDirect désactivé) : le lecteur DeoVR risque de ne pas le démarrer`);
+        dlLog(D, 'info', `VRAI FILM PRÊT après ${Math.round((Date.now() - s.t0) / 1000)} s : ${s.realSegs.length} segments, ${Math.round(s.producedSec)} s de tampon (cible ${s.T} s, débit ${mbs(D.speed)} pour ${D.need ? mbs(D.need) : '?'} nécessaires) -> ${s.direct ? 'lecture directe au prochain clic' : 'bascule au prochain rafraîchissement de la playlist'}`);
+      }
     } catch {}
     liveDiskGuard(s);
   }, 1000);
@@ -1330,7 +1355,7 @@ function spawnReal(s) {
   proc.on('exit', (code, sig) => {
     if (s.proc !== proc) return;
     s.exited = true;
-    if (s.closed) return;
+    if (s.closed || s.handover) return;
     if (code === 0) { s.realDone = true; dlLog(D, 'info', 'conversion du film terminée (code 0)'); return; }
     dlLog(D, 'warn', `conversion interrompue (code ${code}${sig ? ', signal ' + sig : ''})${s.err.trim() ? ' — ' + s.err.trim().split('\n').slice(-3).join(' | ').slice(0, 400) : ''}`);
     if (s.restarts < cfg.ffmpegRestarts && D.active) {
@@ -1412,7 +1437,7 @@ setInterval(checkCache, 5 * 60000).unref(); setTimeout(checkCache, 3000).unref()
 let stremioDown = null;
 async function stremioPing() {
   try { await fetch(cfg.localStremio + '/settings', { signal: AbortSignal.timeout(3000) }); if (stremioDown) { log('info', `Stremio répond de nouveau (arrêt de ${Math.round((Date.now() - stremioDown.since) / 1000)} s)`); stremioDown = null; checkCache(); } }
-  catch (e) { if (!stremioDown) { stremioDown = { since: Date.now(), why: e.cause && e.cause.code || e.message }; log('warn', `Stremio ne répond pas sur ${cfg.localStremio} (${stremioDown.why}) : lancez l'application Stremio (le serveur de streaming démarre avec elle)`); } }
+  catch (e) { if (!stremioDown) { stremioDown = { since: Date.now(), why: e.cause && e.cause.code || e.message }; log('warn', `Stremio n'est pas lancé (${cfg.localStremio} : ${stremioDown.why}). Ouvrez l'application Stremio : le pont repart tout seul dès qu'elle répond.`); } }
 }
 setInterval(stremioPing, cfg.stremioPingMs).unref(); setTimeout(stremioPing, 1500).unref();
 
@@ -1436,6 +1461,7 @@ function loadStatus(s) {
 }
 const wrapTxt = (t, n = 64) => { const out = []; let line = ''; for (const w of String(t).split(/\s+/)) { if ((line + ' ' + w).trim().length > n) { out.push(line); line = w; } else line = (line + ' ' + w).trim(); } if (line) out.push(line); return out; };
 function liveProgressText(s, i = 0) {
+  if (s.realReady && s.direct) return ['Film PRÊT (pont DeoVR-Stremio)', String(s.D.title || '').replace(/[^\x20-\x7EÀ-ÿ]/g, '').slice(0, 60), `Tampon prêt : ${Math.round(s.producedSec || 0)} s de film déjà reçus`, 'Ce film est en HEVC : DeoVR ne peut pas l\'enchaîner ici.', 'Appuyez sur RETOUR, puis relancez le film :', 'il démarrera aussitôt (lecture directe).'];
   const D = s.D, L = loadStatus(s), el = Math.max(Math.round((Date.now() - s.loaderT0) / 1000), i * LOAD_SEG), tot = Math.round((Date.now() - (D.activatedAt || s.t0)) / 1000);
   const lines = ['Chargement du film (pont DeoVR-Stremio)', String(D.title || '').replace(/[^\x20-\x7EÀ-ÿ]/g, '').slice(0, 60), `Étape ${L.step}/4 : ${L.stepTxt}`,
     `Pairs : ${D.peers}   Reçu : ${(L.got / 1e6).toFixed(1)} Mo   Débit : ${mbs(L.sp)}${L.need ? '   Nécessaire : ' + mbs(L.need) : ''}`,
@@ -1456,7 +1482,7 @@ function renderLoader(s, i) {   // un segment de 4 s (image fixe + barre de prog
     let eye = `drawbox=x=${bx}:y=${by}:w=${bw}:h=${Math.round(H / 40)}:color=0x334455:t=fill,drawbox=x=${bx}:y=${by}:w=${fill}:h=${Math.round(H / 40)}:color=0x33cc77:t=fill`;
     if (FONT) eye += `,drawtext=fontfile='${escF(FONT)}':textfile='${escF(txtFile)}':expansion=none:fontcolor=white:fontsize=${fs0}:line_spacing=${Math.round(fs0 / 2)}:x=(w-text_w)/2:y=h*0.2`;
     const vf = g.stack === 'h' ? `[0:v]${eye},split[a][b];[a][b]hstack[v]` : g.stack === 'v' ? `[0:v]${eye},split[a][b];[a][b]vstack[v]` : `[0:v]${eye}[v]`;
-    const useHevc = cfg.loadingCodec === 'hevc' || (cfg.loadingCodec === 'auto' && (s.D.res || 0) >= 2880 && hevcEnc);
+    const useHevc = cfg.loadingCodec === 'hevc' && hevcEnc;
     const venc = useHevc && hevcEnc ? (hevcEnc === 'libx265' ? ['-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'log-level=error:keyint=20'] : ['-c:v', 'hevc_nvenc', '-g', '20']) : ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-g', '20'];
     const args = ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `color=c=0x101820:s=${W}x${H}:r=5:d=${LOAD_SEG}`, '-f', 'lavfi', '-i', `anullsrc=r=48000:cl=stereo`,
       '-filter_complex', vf, '-map', '[v]', '-map', '1:a', '-t', String(LOAD_SEG), ...venc, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k',
@@ -1476,29 +1502,29 @@ function renderLoader(s, i) {   // un segment de 4 s (image fixe + barre de prog
   return p;
 }
 function livePlaylist(s) {
-  const D = s.D, now = Date.now();
+  const D = s.D, now = Date.now(), real = s.realReady && !s.direct;   // film HEVC prêt : on ne l'insère PAS dans le flux HLS (le lecteur ne le décode pas), l'écran de chargement continue avec le message « relancez »
   const fresh = !s.lastPl || now - s.lastPl > (s.playerSec > 0 ? 90000 : 20000);   // nouveau lecteur / nouveau clic : la playlist repart de zéro (pause du lecteur < 90 s : même playlist)
   if (fresh) {
     if (s.lastPl) s.epoch++;
-    s.loaderT0 = now; s.shown = 0; s.skipWaits = s.realReady;
-    if (s.realReady) dlLog(D, 'info', 'film déjà prêt : playlist envoyée SANS écran de chargement (lecture immédiate)');
+    s.loaderT0 = now; s.shown = 0; s.skipWaits = real;
+    if (real) dlLog(D, 'info', 'film déjà prêt : playlist envoyée SANS écran de chargement (lecture immédiate)');
   }
   s.lastPl = now; s.plCount++;
   const el = (now - s.loaderT0) / 1000;
-  if (!s.skipWaits && !s.realReady) s.shown = Math.max(s.shown, Math.ceil(el / LOAD_SEG) + 3);
-  const waits0 = s.skipWaits ? 0 : s.shown, trimmed = !!(s.realReady && s.trim > 0), waits = trimmed ? 0 : waits0, first = trimmed ? s.trim : 0;
+  if (!s.skipWaits && !real) s.shown = Math.max(s.shown, Math.ceil(el / LOAD_SEG) + 3);
+  const waits0 = s.skipWaits ? 0 : s.shown, trimmed = !!(real && s.trim > 0), waits = trimmed ? 0 : waits0, first = trimmed ? s.trim : 0;
   if (!trimmed) s.waitsListed = waits0;
   const dseq = trimmed ? ((s.seqBase > 0 ? 1 : 0) + (s.discAt || []).filter(i => i <= s.trim).length) : 0;   // élagage disque : les segments retirés du début sont comptés (spécification HLS)
-  const L = ['#EXTM3U', '#EXT-X-VERSION:3', `#EXT-X-TARGETDURATION:${Math.max(10, Math.ceil(Math.max(0, ...s.realSegs.map(x => x[1]))))}`, `#EXT-X-MEDIA-SEQUENCE:${trimmed ? (s.seqBase || 0) + s.trim : 0}`, ...(dseq ? [`#EXT-X-DISCONTINUITY-SEQUENCE:${dseq}`] : []), '#EXT-X-PLAYLIST-TYPE:EVENT', `#EXT-X-START:TIME-OFFSET=${s.realReady && s.playerSec > 0 && waits ? waits * LOAD_SEG : 0}`];
+  const L = ['#EXTM3U', '#EXT-X-VERSION:3', `#EXT-X-TARGETDURATION:${Math.max(10, Math.ceil(Math.max(0, ...s.realSegs.map(x => x[1]))))}`, `#EXT-X-MEDIA-SEQUENCE:${trimmed ? (s.seqBase || 0) + s.trim : 0}`, ...(dseq ? [`#EXT-X-DISCONTINUITY-SEQUENCE:${dseq}`] : []), '#EXT-X-PLAYLIST-TYPE:EVENT', `#EXT-X-START:TIME-OFFSET=${real && s.playerSec > 0 && waits ? waits * LOAD_SEG : 0}`];
   for (let i = 0; i < waits; i++) L.push(`#EXTINF:${LOAD_SEG}.000,`, `w${s.epoch}_${i}.ts`);
-  if (s.realReady) {
+  if (real) {
     if (waits) L.push('#EXT-X-DISCONTINUITY');
     for (let i = first; i < s.realSegs.length; i++) { const [f, d] = s.realSegs[i]; if (i > first && s.discAt && s.discAt.includes(i)) L.push('#EXT-X-DISCONTINUITY'); L.push(`#EXTINF:${d.toFixed(3)},`, `real/${f}`); }
   }
-  const hopeless = !s.realReady && now - (D.activatedAt || s.t0) > cfg.loaderMaxMin * 60000;
-  if ((s.realReady && s.realDone) || hopeless) L.push('#EXT-X-ENDLIST');
+  const hopeless = !real && now - (D.activatedAt || s.t0) > cfg.loaderMaxMin * 60000;
+  if ((real && s.realDone) || hopeless) L.push('#EXT-X-ENDLIST');
   if (hopeless && !s.hopeless) { s.hopeless = true; dlLog(D, 'warn', `écran de chargement : arrêt après ${cfg.loaderMaxMin} min sans film exploitable`); }
-  if (waits && !s.realReady) { const cur = Math.floor(el / LOAD_SEG); for (let i = cur; i <= Math.min(waits - 1, cur + 1); i++) renderLoader(s, i).catch(() => {}); }   // prépare les 2 prochains segments
+  if (waits && !real) { const cur = Math.floor(el / LOAD_SEG); for (let i = cur; i <= Math.min(waits - 1, cur + 1); i++) renderLoader(s, i).catch(() => {}); }   // prépare les 2 prochains segments
   return L.join('\n') + '\n';
 }
 // ----- test de bascule HLS (sans torrent) : même playlist et même rendu que le vrai écran de chargement, mais avec un petit film de test -----
@@ -1515,7 +1541,7 @@ async function switchSession(kind, film, screen, stereo) {
     fs.mkdirSync(path.join(dir, 'real'), { recursive: true });
     const idxf = path.join(dir, 'real', 'index.m3u8');
     try { fs.rmSync(idxf, { force: true }); } catch {}
-    await new Promise(ok => { const pr = cp.spawn(cfg.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', path.join(APP_DIR, 'test', film), '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'vod', '-hls_segment_filename', path.join(dir, 'real', 'seg%05d.ts'), idxf], { stdio: 'ignore' }); pr.on('error', ok); pr.on('exit', ok); });
+    await new Promise(ok => { const pr = cp.spawn(cfg.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', path.join(RES_DIR, 'test', film), '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0', '-hls_playlist_type', 'vod', '-hls_segment_filename', path.join(dir, 'real', 'seg%05d.ts'), idxf], { stdio: 'ignore' }); pr.on('error', ok); pr.on('exit', ok); });
   } else s.dir = dir;
   try {
     const segs = []; let d = 0; for (const l of fs.readFileSync(path.join(dir, 'real', 'index.m3u8'), 'utf8').split('\n')) { const m = /^#EXTINF:([\d.]+)/.exec(l); if (m) d = +m[1]; else if (/^seg\d+\.ts$/.test(l.trim())) segs.push([l.trim(), d]); }
@@ -1537,6 +1563,11 @@ async function serveSwitchTest(req, res, kind, file) {
   if (m) { const f = path.join(s.dir, 'real', m[1]); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } if (req.method === 'GET') { s.realSeen = (s.realSeen || 0) + 1; if (s.realSeen === 1) log('info', `test de bascule ${kind} : BASCULE RÉUSSIE — le lecteur a demandé le 1er segment du film de test`); } return serveLocal(req, res, f, 'video/mp2t'); }
   res.writeHead(404); res.end();
 }
+// le lecteur DeoVR redemande le tout premier segment : il recommence le flux depuis le début (échec de démarrage/décodage, ou nouvel essai)
+function noteReopen(D, e, what) {
+  e.opens = e.opens || []; const t = Math.round((Date.now() - e.t0) / 1000); e.opens.push(t);
+  if (e.opens.length > 1) dlLog(D, 'warn', `+${t} s le lecteur DeoVR recommence le flux (${what}) depuis le début : ouverture n°${e.opens.length} — il n'a pas réussi à le démarrer (codec/débit trop lourd pour son décodeur ?)`);
+}
 async function serveLive(req, res, hash, idx, file) {
   if (req.method === 'HEAD') { res.writeHead(200, { 'content-type': file.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t', 'cache-control': 'no-cache', 'access-control-allow-origin': '*' }); return res.end(); }   // une simple sonde HEAD ne démarre rien : le téléchargement commence au premier GET (le vrai clic)
   const D = dlTouch(hash, idx, `${req.method} /live/…/${file}`, req), s = liveStart(D);
@@ -1551,6 +1582,7 @@ async function serveLive(req, res, hash, idx, file) {
   let m = /^w(\d+)_(\d+)\.ts$/.exec(file);
   if (m) {
     first('wait1', 'premier segment de chargement demandé (écran de chargement visible dans le casque)');
+    if (req.method === 'GET' && +m[2] === 0) noteReopen(D, e, 'écran de chargement');
     try { const f = await renderLoader(s, +m[2]); e.loaderSegs = Math.max(e.loaderSegs, +m[2] + 1); return serveLocal(req, res, f, 'video/mp2t'); } catch { res.writeHead(500); return res.end(); }
   }
   m = /^real\/(seg\d+\.ts)$/.exec(file);
@@ -1558,6 +1590,7 @@ async function serveLive(req, res, hash, idx, file) {
     const f = path.join(s.dir, 'real', m[1]);
     if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
     if (req.method === 'GET') {
+      if (/^seg0*0\.ts$/.test(m[1])) noteReopen(D, e, 'film');
       e.realSegs++; if (!e.switched) { e.switched = true; first('real1', `premier segment du VRAI FILM demandé -> la bascule a fonctionné (${e.loaderSegs} segment(s) de chargement vus avant)`); }
       const k = s.realSegs.findIndex(x => x[0] === m[1]); if (k >= 0) s.playerSec = Math.max(s.playerSec, s.realSegs.slice(0, k + 1).reduce((a, x) => a + x[1], 0));
     }
@@ -1791,6 +1824,7 @@ function vidFor(key, fn) {   // fiche vidéo : cache 45 s des réponses valides 
   const p = fn().then(v => { if (v) { vidCache.set(key, { t: Date.now(), v }); if (vidCache.size > 2000) vidCache.clear(); } return v; });
   vidInflight.set(key, p); p.then(() => vidInflight.delete(key), () => vidInflight.delete(key)); return p;
 }
+function vidInvalidate(id) { for (const k of [...vidCache.keys()]) if (k.includes(`:${id}:`)) vidCache.delete(k); }   // l'état du film a changé (prêt...) : la prochaine fiche doit être recalculée, pas servie depuis le cache de 45 s
 const rootHits = [];   // dernières demandes de la racine (/ et /deovr) : ce que DeoVR demande vraiment quand on tape l'adresse du pont
 function perfData() {
   const lv = {}; for (const [, h] of filmHealth) { const k = h.hidden ? 'masqués(aucune source)' : (BADGES[h.level] || '⚪'); lv[k] = (lv[k] || 0) + 1; }
@@ -1803,7 +1837,8 @@ let lastState = '';
 function stateLog() {
   const p = perfData(), act = [...dls.values()].filter(D => D.active).length, st = JSON.stringify([p.scan.enFile, p.films.analyses, p.scrape.answered, act]);
   if (st === lastState) return; lastState = st;
-  log('info', `état : films analysés ${p.films.analyses} ${JSON.stringify(p.films.parNiveau)} · file ${p.scan.enFile} · téléchargements actifs ${act}/${cfg.maxDownloads} · trackers répondants ${p.scrape.answered}/${p.scrape.asked}`);
+  const lv = {}; for (const [, h] of filmHealth) { const k = h.hidden ? 'sans source' : ({ 3: 'très bons', 2: 'corrects', 1: 'faibles', 0: 'sans seeder' }[h.level] || 'en attente'); lv[k] = (lv[k] || 0) + 1; }
+  log('info', `analyse des films (trackers, sans rien télécharger) : ${p.films.analyses} classés [${Object.entries(lv).map(([k, v]) => `${v} ${k}`).join(', ')}] · ${p.scan.enFile} en attente · téléchargements actifs ${act}/${cfg.maxDownloads} · trackers qui répondent ${p.scrape.answered}/${p.scrape.asked}`);
 }
 setInterval(stateLog, 60000).unref();
 async function warmup(port) {   // au démarrage puis toutes les 8 min : catalogues chargés et films classés AVANT que DeoVR ne demande la liste
@@ -1813,12 +1848,12 @@ async function warmup(port) {   // au démarrage puis toutes les 8 min : catalog
 // ---------- Serveur HTTP ----------
 const platformOf = req => (/Android|Quest|Oculus|Pico/i.test(req.headers['user-agent'] || '') ? 'quest' : cfg.platform);
 const send = (res, code, obj) => {
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' });
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': 'no-store, no-cache, must-revalidate, max-age=0', pragma: 'no-cache', expires: '0' });   // DeoVR garde la bibliothèque en mémoire : on lui interdit de réutiliser une ancienne réponse
   res.end(JSON.stringify(obj, null, cfg.debug ? 2 : 0));
 };
 
 function start(port = cfg.port) {
-  log('info', `===== Pont DeoVR-Stremio v${VERSION} | Node ${process.versions.node} | ${process.platform} ${os.release()} | port ${port} | plateforme ${cfg.platform} | ffmpeg ${ffmpegOk ? 'oui' : 'non'} | DNS ${cfg.dnsMode} | vrOnly ${cfg.vrOnly} | maxDownloads ${cfg.maxDownloads} | garde ${cfg.holdMinutes} min | trackers ${cfg.scrapeTrackers.length} | dossiers locaux ${cfg.localDirs.length} =====`);
+  log('info', `Configuration : Node ${process.versions.node} | ${process.platform} ${os.release()} | port ${port} | plateforme ${cfg.platform} | ffmpeg ${ffmpegOk ? 'oui' : 'non'} | DNS ${cfg.dnsMode} | vrOnly ${cfg.vrOnly} | maxDownloads ${cfg.maxDownloads} | garde ${cfg.holdMinutes} min | trackers ${cfg.scrapeTrackers.length} | dossiers locaux ${cfg.localDirs.length}`);
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, `http://${req.headers.host}`);
     const base = `http://${req.headers.host}`;
@@ -1852,6 +1887,11 @@ function start(port = cfg.port) {
       if (sw) { noteOpen(u.searchParams.get('via'), 'test de bascule HLS', req); return serveSwitchTest(req, res, sw[1], sw[2]); }
       const tf = u.pathname.match(/^\/test\/([\w.-]+)$/);
       if (tf) { if (req.method === 'GET') noteOpen(u.searchParams.get('via'), 'fichier vidéo de test', req); return serveTestFile(req, res, tf[1]); }
+      const lbf = u.pathname.match(/^\/lab\/([\w-]+)\/([\w.-]+)$/);
+      if (lbf) return lab().handle(req, res, lbf[1], lbf[2]);
+      if (u.pathname === '/debug/labo') return send(res, 200, lab().data());
+      const lbv = u.pathname.match(/^\/video\/lab\/([\w-]+?)(\.json)?$/);
+      if (lbv) { const v = lab().video(lbv[1], base); return v ? send(res, 200, v) : send(res, 404, { error: 'scène inconnue' }); }
       const tv = u.pathname.match(/^\/video\/test\/([\w-]+?)(\.json)?$/);
       if (tv) { noteOpen(u.searchParams.get('via'), 'fiche JSON de test', req); const v = testVideo(tv[1], base); return v ? send(res, 200, v) : send(res, 404, { error: 'test inconnu' }); }
       if (u.pathname === '/catalogs') return send(res, 200, await catalogList());
@@ -1889,7 +1929,7 @@ function start(port = cfg.port) {
         if (!v) return send(res, 404, { error: 'aucun flux lisible trouvé' });
         return send(res, 200, v._meta ? { ...v, title: healthTag(v._meta) + v._name } : v);   // le titre de la fiche porte la MÊME pastille que la liste
       }
-      if (u.pathname === '/debug') return send(res, 200, { version: VERSION_FULL, compte: auth.status(), chemins: { donnees: DATA_DIR, application: APP_DIR, temporaire: cfg.tempDir, mode: PATHS.mode, exe: PATHS.sea }, config: { ...cfg, email: cfg.email ? cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: cfg.password ? '***' : '', authKey: cfg.authKey ? '***' : '', addonUrls: cfg.addonUrls.map(redact) }, log: logBuf.slice(-100) });
+      if (u.pathname === '/debug') return send(res, 200, { version: VERSION_FULL, compte: auth.status(), chemins: { donnees: DATA_DIR, application: APP_DIR, reglages: PATHS.configFile, ressources: RES_DIR, temporaire: cfg.tempDir, mode: PATHS.mode, exe: PATHS.sea }, config: { ...cfg, email: cfg.email ? cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: cfg.password ? '***' : '', authKey: cfg.authKey ? '***' : '', addonUrls: cfg.addonUrls.map(redact) }, log: logBuf.slice(-100) });
       const d = u.pathname.match(/^\/debug\/video\/([^/]+)\/(.+)$/);
       if (d) {
         const a = await analyzeVideo(d[1], decodeURIComponent(d[2]), base, req.headers.host, { measure: u.searchParams.get('measure') === '1' });
@@ -1905,7 +1945,7 @@ function start(port = cfg.port) {
       send(res, 500, { error: e.message });
     }
   });
-  return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, cfg.bindHost, () => { selfPort = server.address().port; setTimeout(() => warmup(port), 2000); setInterval(() => warmup(port), 8 * 60000).unref(); resolve(server); }); });
+  return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, cfg.bindHost, () => { selfPort = server.address().port; if (cfg.testScene && ffmpegOk) setTimeout(() => { try { lab().prepare(); } catch {} }, 8000).unref(); setTimeout(() => warmup(port), 2000); setInterval(() => warmup(port), 8 * 60000).unref(); resolve(server); }); });
 }
 
 function devPage(host) {   // /dev (mode --dev uniquement) : tous les points d'observation au même endroit
@@ -1915,7 +1955,7 @@ function devPage(host) {   // /dev (mode --dev uniquement) : tous les points d'o
 async function selfCheck() {
   { const st = auth.status(); if (st.connecte) log('info', `Compte Stremio : connecté (${st.source}${st.stockage === 'dpapi' ? ', clé chiffrée par Windows' : st.stockage ? ', clé non chiffrée (hors Windows)' : ''})`); else log('warn', `Compte Stremio : NON connecté. Ouvrez http://localhost:${cfg.port}/setup dans un navigateur sur ce PC.`); }
   try { const r = await fetch(`${cfg.localStremio}/settings`, { signal: AbortSignal.timeout(4000) }); log('info', `Serveur Stremio local : répond (HTTP ${r.status})`); }
-  catch (e) { log('warn', `Serveur Stremio local injoignable (${cfg.localStremio}) : lance l'application Stremio, sinon les torrents ne démarreront pas`); }
-  if (!fs.existsSync(path.join(APP_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier test/ incomplet : les vidéos de test ne seront pas lisibles');
+  catch {}   // injoignable : stremioPing() le signale une seule fois (message « Stremio n'est pas lancé »)
+  if (!fs.existsSync(path.join(RES_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier resources/test incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { DATA_DIR, APP_DIR, PATHS, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };

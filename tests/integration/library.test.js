@@ -19,7 +19,7 @@ test('/deovr : onglets dans l\'ordre (En cours d\'abord), un onglet par catalogu
   assert.equal(names[0], 'En cours');
   assert.ok(names.includes('Nouveautés') && names.includes('Top VR') && names.includes('Films 3D'), names.join(', '));
   assert.equal(names[names.length - 1], 'Test pont');
-  assert.equal(scene(lib, 'Test pont').list.length, 6, 'tests 1 à 6');
+  assert.ok(scene(lib, 'Test pont').list.length >= 6, 'tests 1 à 6 (+ mode d\'emploi et banc de test casque si ffmpeg)');
   assert.ok(!names.includes('Dramas'), 'le catalogue sans VR est masqué (vrOnly)');
   assert.equal(lib.authorized, '0');
 });
@@ -36,7 +36,7 @@ test('pastilles : identiques dans la liste et dans la fiche, ASCII, jamais PRET/
   for (const item of scene(lib, 'Top VR').list.slice(0, 4)) {
     const fiche = await bridge.json(new URL(item.video_url).pathname);
     assert.equal(fiche.title, item.title, 'titre de fiche = titre de liste');
-    assert.match(item.title, /^\[(?:(?:HD|4K|6K|8K)? ?S\d+|S\?|HTTP)\] /, item.title);
+    assert.match(item.title, /^\[(?:S\d+|S\?|HTTP)\] /, item.title);   // seeders seulement : la qualité (8K...) est déjà dans le titre du film
     assert.ok(![...item.title].some(c => c.codePointAt(0) > 0xFF && c !== '·'), 'pas d\'emoji');
     assert.ok(!/PRET|PRÊT|\bOK\b/.test(item.title.split('] ')[0]));
   }

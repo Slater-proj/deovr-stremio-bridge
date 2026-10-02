@@ -1,0 +1,46 @@
+DEBOGAGE - PACKAGE DE TEST
+==========================
+
+Ce package contient en plus le dossier utility\ (voir utility\LISEZMOI-UTILITAIRES.txt).
+
+PROCEDURE POUR UN ESSAI SUR CASQUE
+  1. Lancez Stremio.
+  2. utility\LANCER-MODE-DEV.bat  (journaux detailles, page /dev)
+  3. Reproduisez le probleme dans DeoVR (notez le titre du film et l'heure approximative).
+  4. SANS fermer le pont : utility\RAPPORT-SUPPORT.bat
+  5. Transmettez data\rapport-support.txt (relisez-le : sans mot de passe ni cle, mais verifiez).
+
+OU SONT LES FICHIERS
+  config.json                reglages (a cote de l'exe)
+  data\bridge-debug.log      journal complet
+  data\bridge-requests.log   requetes de DeoVR
+  data\bridge-decisions.log  pourquoi tel format / tel flux
+  data\bridge-bilans.log     un bilan par film lance
+  data\bridge-state.json     registre "En cours"
+  data\secrets.dat           cle Stremio chiffree (NE JAMAIS TRANSMETTRE)
+  data\tmp\                  vignettes, segments de lecture (effacable, pont arrete)
+  resources\                 ffmpeg et videos de test
+
+PAGES UTILES (adresse du pont + chemin ; surtout avec --dev)
+  /dev               liste de tous les points d'observation
+  /status            films en cours : pairs, debit reel / necessaire
+  /debug/downloads   chronologie complete de chaque clic
+  /debug             version, compte (sans secret), chemins, reglages masques
+  /debug/perf        performances, ecran de chargement, ouvertures de test
+  /debug/labo        banc de test casque : verdict par scene (flux avale ou recommence)
+  /t                 test des liens deovr:// (a taper en entier dans DeoVR)
+
+BANC DE TEST CASQUE (onglet "Test pont" dans DeoVR : "Labo 1" a "Labo 6", generes au demarrage)
+  Chaque Labo est une petite video synthetique qui repond a UNE question (H.264 ou HEVC, HLS en TS ou en fMP4,
+  bascule chargement -> film, description par "path"). Pour chacun, notez : l'image apparait-elle ? devant vous ?
+  le texte est-il net ? DeoVR propose-t-il le choix du mode VR ? Puis lancez utility\RAPPORT-SUPPORT.bat : le rapport
+  contient /debug/labo (ce que le lecteur a reellement demande : "OK probable" ou "ECHEC probable : flux recommence").
+  Aide-memoire : un flux que DeoVR recommence exactement 15 s apres son debut = il n'arrive pas a le demarrer.
+
+TESTS A FAIRE SUR LE CASQUE (onglet "Test pont" dans DeoVR)
+  - Test 5 puis Test 6 (30 s entre les deux) : ecran de chargement ~12 s puis la video demarre seule.
+  - Un vrai film avec des seeders : quittez avant la fin, rouvrez DeoVR : il doit etre dans "En cours".
+  - Les affiches sont-elles en paysage ? Les accents s'affichent-ils bien ?
+
+LIGNE DE COMMANDE
+  DeoVR-Stremio-Bridge.exe --help      toutes les options (--dev, --port, --login, --logout, --report, --diagnose...)

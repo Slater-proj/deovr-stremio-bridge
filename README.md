@@ -33,14 +33,14 @@ Designed on a Pimax Dream Air + RTX 4090; any PCVR headset running DeoVR for Win
 - **Built to keep running**: ffmpeg is restarted at the right position if it crashes, watched segments are trimmed when the disk gets full, the Stremio cache size is checked, a clear message appears if Stremio isn't running, and `start.bat` (Node.js variant) restarts the bridge if it stops.
 - **Portable, no installation**: one `DeoVR-Stremio-Bridge.exe` with Node.js and ffmpeg inside the zip; everything it writes stays in a `data\` folder next to it. Delete the folder and it is gone.
 - **Your Stremio password is never stored.** You sign in once on a local page (`/setup`, reachable from the PC only); the bridge keeps a session key encrypted with Windows DPAPI.
-- **Developer mode** (`--dev` / `LANCER-MODE-DEV.bat`): detailed console log, ffmpeg output, a `/dev` page, and `RAPPORT-SUPPORT.bat` which writes a support report (secrets masked) with everything needed to debug.
-- **Diagnostics included**: `DIAGNOSTIC.bat`, a support report, per-click logs, a per-film summary, `/status` and `/debug/downloads`.
+- **Developer mode** (`--dev` / `utility\LANCER-MODE-DEV.bat` in the debug zip): detailed console log, ffmpeg output, a `/dev` page, and `--report` (`utility\RAPPORT-SUPPORT.bat`) which writes a support report (secrets masked) with everything needed to debug.
+- **Diagnostics included**: `--diagnose`, a support report, per-click logs, a per-film summary, `/status` and `/debug/downloads`.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    D["DeoVR<br/>built-in browser + player"] -- "/deovr library, deeplinks" --> B(("Bridge<br/>:8080"))
+    D["DeoVR<br/>built-in browser + player"] -- "/deovr library, deeplinks" --> B(("Bridge<br/>:4477"))
     B -- "catalogues + streams" --> A["Stremio addons"]
     B -- "create / stats / feed" --> S["Stremio streaming server<br/>:11470"]
     S -- "torrent" --> P["Peers"]
@@ -68,11 +68,11 @@ More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 1. Download `DeoVR-Stremio-Bridge-vX.Y.Z-windows-x64.zip` from [Releases](../../releases/latest) and unzip it anywhere (not in *Program Files*).
 2. Start Stremio, then double-click **`DeoVR-Stremio-Bridge.exe`**. Windows SmartScreen may warn because the exe is not code-signed: *More info → Run anyway*.
 3. First run only: your browser opens a local sign-in page — enter your Stremio e-mail and password once.
-4. In DeoVR's browser, type `http://localhost:8080`.
+4. In DeoVR's browser, type `http://localhost:4477`.
 
-The console window is the bridge's log; closing it stops the bridge. Everything (settings, encrypted key, logs, temp files) lives in `data\` beside the exe. Details, options and the advanced Node.js variant: [docs/INSTALL.md](docs/INSTALL.md).
+The console window is the bridge's log; closing it stops the bridge. Settings live in `config.json` created beside the exe on first run (the default port is **4477**; change it there); everything the bridge writes (encrypted key, logs, temp files) lives in `data\`. Details, options and the advanced Node.js variant: [docs/INSTALL.md](docs/INSTALL.md).
 
-Optional: `DEMARRAGE-AUTO.bat` starts the bridge with Windows; `PARE-FEU.bat` opens the firewall for another device; `LANCER-MODE-DEV.bat` starts it in developer mode; `RAPPORT-SUPPORT.bat` builds a support report.
+Two zips are published: **release** (exe + `resources\` + `docs\` — nothing else) and **debug** (the same plus a `utility\` folder: developer mode, support report, diagnostics, firewall, autostart; each tool is described in `utility\LISEZMOI-UTILITAIRES.txt`).
 
 ## Security of your Stremio account
 

@@ -1,0 +1,68 @@
+DEOVR-STREMIO BRIDGE - GUIDE RAPIDE
+===================================
+
+Affiche votre bibliotheque Stremio dans DeoVR (casque PC VR) et lance un film en un clic.
+Rien a installer : tout est dans ce dossier. Supprimer le dossier supprime tout.
+
+1. DEMARRER
+   - Lancez l'application Stremio (son serveur de streaming doit tourner).
+   - Double-clic sur DeoVR-Stremio-Bridge.exe. La fenetre noire est la console du pont :
+     la fermer arrete le pont.
+   - Windows SmartScreen peut avertir (application non signee) :
+     "Informations complementaires" puis "Executer quand meme".
+
+2. SE CONNECTER A STREMIO (une seule fois)
+   - Au premier lancement, votre navigateur s'ouvre sur  http://localhost:4477/setup
+     (le port est celui de config.json). Saisissez e-mail et mot de passe Stremio.
+   - Le mot de passe n'est JAMAIS enregistre. Le pont garde seulement une cle de session,
+     chiffree par Windows, dans data\secrets.dat (lisible uniquement par votre compte Windows
+     sur ce PC). Changer de compte ou se deconnecter : meme page /setup.
+
+3. OUVRIR DANS DEOVR
+   - Dans le navigateur integre de DeoVR, tapez  http://localhost:4477
+     (ou l'adresse affichee dans la console au demarrage).
+   - Onglets : "En cours" (vos films lances), "Plus de seeds", "Nouveautes", un onglet par
+     catalogue Stremio, "Mes videos" (dossiers locaux), "Test pont".
+   - Lancer un film = demarrer son telechargement. Un ecran de chargement s'affiche
+     tout de suite (etape, pairs, debit, tampon, temps restant). 30 a 60 secondes au debut
+     est normal. Film H.264 : il demarre tout seul. Film HEVC (la plupart des films 6K/8K) :
+     DeoVR ne sait pas l'enchainer sur cet ecran, qui affiche alors "PRET - appuyez sur
+     RETOUR puis relancez le film" ; au second clic il demarre aussitot (lecture directe).
+     Vous pouvez quitter : le telechargement continue 30 minutes.
+   - MENU LATERAL ET RECHERCHE : la liste native de DeoVR n'en a pas (limite de DeoVR).
+     Dans le navigateur de DeoVR, tapez  http://localhost:4477/ui  (menu, categories,
+     recherche) ou  http://localhost:4477/s/votre mot  (recherche directe).
+   - La liste ne se met a jour que quand DeoVR la redemande : revenez a la page des sites
+     puis rouvrez le pont pour rafraichir (l'onglet "En cours" est alors a jour).
+   - Pastilles dans les titres : [S12] = 12 seeders annonces par les trackers, [EN COURS 18 %],
+     [PRET - relancez le film], [BLOQUE - 0 pair]... (la qualite 8K/6K est deja
+     dans le titre du film, elle n'est pas repetee dans la pastille)
+
+4. REGLAGES : config.json (a cote de l'exe)
+   Cree au premier lancement. Les principaux :
+     port         adresse du pont (4477 par defaut ; changez-le si un autre logiciel l'utilise)
+     bindHost     "127.0.0.1" = seulement ce PC ; "0.0.0.0" = aussi un casque autonome / le reseau
+     platform     "windows" (DeoVR PC) ou "quest" (casque autonome)
+     vrOnly       true = seulement les films VR/3D ; false = tous les films des catalogues
+     localDirs    dossiers de videos locales, ex. ["D:\\VR"]
+     maxDownloads films telecharges en meme temps ;  holdMinutes : duree de garde apres depart
+     dev          true = mode developpeur a chaque lancement
+   Modifiez, enregistrez, puis relancez le pont. Liste complete des options :
+   https://github.com/Slater-proj/deovr-stremio-bridge/blob/main/docs/CONFIGURATION.md
+
+5. PRE-REQUIS STREMIO
+   Dans Stremio : Parametres > Streaming > Cache : "illimite" ou 20 Go minimum (les films VR
+   font 5 a 60 Go).
+
+6. CASQUE AUTONOME (Quest sans PC)
+   Utilisez l'adresse IP du PC affichee au demarrage (ex. http://192.168.x.x:4477), mettez
+   "platform": "quest" et autorisez le pare-feu (utility\PARE-FEU.bat si present).
+
+7. EN CAS DE PROBLEME
+   - Lancez  DeoVR-Stremio-Bridge.exe --dev  (journaux detailles) puis
+     DeoVR-Stremio-Bridge.exe --report  : cela ecrit data\rapport-support.txt (sans secret) a transmettre.
+   - Autres options : DeoVR-Stremio-Bridge.exe --help
+   - Documentation complete, depannage, code source :
+     https://github.com/Slater-proj/deovr-stremio-bridge
+
+Licences : docs\licences\ (ffmpeg, Node.js, ce projet).

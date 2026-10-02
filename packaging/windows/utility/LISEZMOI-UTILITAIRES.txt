@@ -1,0 +1,39 @@
+OUTILS DU PONT DEOVR-STREMIO (dossier utility)
+==============================================
+
+Ces fichiers sont facultatifs : le pont se lance simplement avec DeoVR-Stremio-Bridge.exe
+(dossier parent). Ils servent a regler, deboguer et depanner. Double-clic sur le .bat voulu.
+Aucun ne modifie Windows, sauf ceux marques [Windows].
+
+LANCER-MODE-DEV.bat
+    Lance le pont en MODE DEVELOPPEUR : journaux detailles dans la fenetre et dans
+    data\bridge-debug.log, sortie de ffmpeg, et une page http://localhost:<port>/dev qui
+    liste tous les points d'observation. A utiliser pour tous les essais sur casque.
+    (Equivalent : DeoVR-Stremio-Bridge.exe --dev, ou "dev": true dans config.json.)
+
+RAPPORT-SUPPORT.bat
+    Prepare data\rapport-support.txt : version, dossiers, etat du compte (sans mot de passe
+    ni cle), reglages masques, journaux recents, etat des telechargements. C'est LE fichier
+    a transmettre pour comprendre un probleme. Lancez-le de preference pendant que le pont
+    tourne (il inclut alors son etat en direct), juste apres avoir reproduit le probleme.
+    Relisez-le avant de le partager.
+
+DIAGNOSTIC.bat
+    Verifie tout (ffmpeg, Stremio, addons, trackers, reseau) et ecrit data\diagnostic-report.txt.
+    A lancer quand "ca ne marche pas du tout" ou apres un changement de PC / reseau.
+
+EDITER-REGLAGES.bat
+    Ouvre config.json (a cote de l'exe) dans le Bloc-notes : port, bindHost, platform, vrOnly,
+    dossiers locaux... Relancez le pont apres modification.
+
+PARE-FEU.bat   [Windows, administrateur]
+    Autorise l'application dans le pare-feu (reseau prive). Utile seulement pour un casque
+    autonome ou un autre appareil du reseau. Inutile pour DeoVR sur le meme PC.
+
+DEMARRAGE-AUTO.bat / DEMARRAGE-AUTO-RETIRER.bat   [Windows]
+    Ajoute / retire un raccourci dans le dossier Demarrage de Windows : le pont se lance a
+    l'ouverture de votre session.
+
+Dossiers : config.json et DeoVR-Stremio-Bridge.exe sont dans le dossier parent ; tout ce que
+le pont ecrit (cle Stremio chiffree, journaux, etat, temporaires) est dans data\ .
+Supprimer le dossier du pont supprime tout.

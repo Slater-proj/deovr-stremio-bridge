@@ -35,16 +35,17 @@ jobs:
           $f = Get-ChildItem C:\ProgramData\chocolatey\lib\ffmpeg -Recurse -Filter ffmpeg.exe | Select-Object -First 1
           if (-not $f -or -not (Test-Path (Join-Path $f.DirectoryName 'ffprobe.exe'))) { throw "ffmpeg.exe / ffprobe.exe introuvables" }
           "FFMPEG_DIR=$($f.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Archive Node (variante avancée)
-        run: npm run build
       - name: Exe portable
         run: node scripts/build-exe.js --ffmpeg-dir "$FFMPEG_DIR"
-      - name: Test de fumée de l'exe
+      - name: Test de fumée de l'exe (release puis debug)
         shell: pwsh
         run: |
           $zip = Get-ChildItem dist\DeoVR-Stremio-Bridge-v*-windows-x64.zip | Select-Object -First 1
           Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\portable"
           node scripts/smoke-exe.js "$env:RUNNER_TEMP\portable\DeoVR-Stremio-Bridge"
+          $zip = Get-ChildItem dist\DeoVR-Stremio-Bridge-v*-windows-x64-debug.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\portable-debug"
+          node scripts/smoke-exe.js "$env:RUNNER_TEMP\portable-debug\DeoVR-Stremio-Bridge"
       - name: Notes de la release (extrait du CHANGELOG)
         run: |
           V="${GITHUB_REF_NAME#v}"
@@ -53,9 +54,9 @@ jobs:
           {
             echo
             echo "---"
-            echo "**Installation** : téléchargez **\`DeoVR-Stremio-Bridge-${GITHUB_REF_NAME}-windows-x64.zip\`**, décompressez-le où vous voulez, double-clic sur \`DeoVR-Stremio-Bridge.exe\`. Aucune installation : Node.js et ffmpeg sont inclus, tout reste dans le dossier. Voir [docs/INSTALL.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/INSTALL.md)."
+            echo "**Installation** : téléchargez **\`DeoVR-Stremio-Bridge-${GITHUB_REF_NAME}-windows-x64.zip\`**, décompressez-le où vous voulez, lancez \`DeoVR-Stremio-Bridge.exe\` (Stremio doit tourner). Aucune installation : Node.js et ffmpeg sont inclus, les réglages sont dans \`config.json\` créé à côté de l'exe, tout le reste dans \`data\\\`. Lisez \`docs\\GUIDE-RAPIDE.txt\`."
             echo
-            echo "L'autre archive (\`deovr-stremio-bridge-…\`) est la variante pour utilisateurs avancés (Node.js à installer)."
+            echo "L'archive \`…-debug.zip\` est le même exe avec en plus le dossier \`utility\\\` (mode développeur, rapport d'assistance) : à prendre pour aider à déboguer."
           } >> notes.md
       - name: Créer la release
         env:

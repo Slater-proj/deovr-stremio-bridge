@@ -50,7 +50,7 @@ function judgeProbe(name, p, isVideo = true) {
   const cfgSafe = { ...cfg, email: cfg.email ? cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: cfg.password ? '***' : '', authKey: cfg.authKey ? '***' : '', addonUrls: cfg.addonUrls.map(redact) };
   R.data.config = cfgSafe;
   out('Config : ' + JSON.stringify(cfgSafe));
-  fs.existsSync(path.join(L.DATA_DIR || __dirname, 'config.json')) ? ok('config.json présent') : warn('config.json absent', 'variables d\'environnement utilisées ?');
+  fs.existsSync(L.PATHS.configFile) ? ok('config.json présent : ' + L.PATHS.configFile) : warn('config.json absent', 'variables d\'environnement utilisées ?');
 
   // 2. Stremio compte + addons
   head('2. Compte Stremio et addons');

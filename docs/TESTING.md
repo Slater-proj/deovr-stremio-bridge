@@ -25,9 +25,9 @@ Sans ffmpeg, les tests qui en ont besoin sont ignorés (marqués *skipped*).
 Faites-le après chaque mise à jour importante ; notez le résultat dans votre ticket.
 
 1. **Bascule HLS** : onglet *Test pont* → *Test 5* puis *Test 6* (attendre 30 s entre les deux). Attendu : écran de chargement ~12 s, puis la vidéo de test démarre seule. Journal : « test de bascule … BASCULE RÉUSSIE ».
-2. **Deeplinks** : ouvrez `http://localhost:8080/t` (en entier) dans le navigateur de DeoVR et cliquez les liens A, C, D, E, F ; `/debug/perf` → `ouverturesTest` indique ceux qui ont ouvert le lecteur.
-3. **Adresse nue** : tapez `http://localhost:8080` ; `/debug/perf` → `racine` montre ce que DeoVR a demandé (`/deovr` attendu).
-4. **Vrai film** : lancez un film avec des seeders, quittez avant la fin, rouvrez DeoVR : il doit être dans *En cours*. `RAPPORT-SUPPORT.bat` (exe) ou `RAPPORT.bat` (version Node) pendant que le pont tourne.
+2. **Deeplinks** : ouvrez `http://localhost:4477/t` (en entier) dans le navigateur de DeoVR et cliquez les liens A, C, D, E, F ; `/debug/perf` → `ouverturesTest` indique ceux qui ont ouvert le lecteur.
+3. **Adresse nue** : tapez `http://localhost:4477` ; `/debug/perf` → `racine` montre ce que DeoVR a demandé (`/deovr` attendu).
+4. **Vrai film** : lancez un film avec des seeders, quittez avant la fin, rouvrez DeoVR : il doit être dans *En cours*. `utility\RAPPORT-SUPPORT.bat` (zip debug ; ou `DeoVR-Stremio-Bridge.exe --report`) pendant que le pont tourne.
 5. **Vignettes et accents** : les affiches sont-elles en paysage ? Les accents et le « · » s'affichent-ils dans les titres ?
 
 ## Ajouter un test

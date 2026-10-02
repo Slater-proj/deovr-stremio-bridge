@@ -13,8 +13,8 @@ Utilisation :  DeoVR-Stremio-Bridge.exe [options]
   --login           ouvre la page de connexion Stremio dans le navigateur (même si déjà connecté)
   --logout          supprime la clé Stremio enregistrée
   --no-browser      n'ouvre jamais le navigateur tout seul
-  --port N          port du serveur (défaut 8080)
-  --data-dir DIR    dossier de données (config, clé chiffrée, journaux) au lieu de .\\data
+  --port N          port du serveur (défaut 4477, ou "port" dans config.json)
+  --data-dir DIR    dossier de données (clé chiffrée, journaux) au lieu de .\\data
   --report          fabrique rapport-support.txt (secrets masqués) ; lancez le pont avant pour inclure son état
   --diagnose        diagnostic complet (bridge-diagnostic)
   --version         affiche la version
@@ -47,19 +47,22 @@ if (has('--report') || has('--diagnose')) {
   return;   // ces scripts terminent le processus eux-mêmes
 }
 
+const cfgState = isSea && !process.env.BRIDGE_CONFIG ? require('./settings').ensure(require('./paths').resolve().configFile) : 'existe';   // exe : crée config.json à côté de lui s'il n'existe pas (avant la lecture des réglages)
 const L = require('./lib'), { start, cfg, log, selfCheck } = L;
 const fs = require('fs');
 start().then(() => {
   const nets = Object.values(require('os').networkInterfaces()).flat().filter(n => n.family === 'IPv4' && !n.internal);
   const b = L.VERSION_INFO.build;
   log('info', `===== DeoVR-Stremio Bridge ${L.VERSION_FULL}${b && b.commit ? ' (build ' + String(b.commit).slice(0, 7) + ')' : ''}${cfg.dev ? '  — MODE DÉVELOPPEUR' : ''} =====`);
-  log('info', `Données : ${L.DATA_DIR}${L.PATHS.mode === 'appdata' ? '  (dossier de l\'exe en lecture seule : repli sur %APPDATA%)' : ''}`);
+  log('info', `Réglages : ${L.PATHS.configFile}${cfgState === 'cree' ? '  (créé au premier lancement : modifiez-le puis relancez, ex. "port")' : ''}`);
+  log('info', `Données  : ${L.DATA_DIR}${L.PATHS.mode === 'appdata' ? '  (dossier de l\'exe en lecture seule : repli sur %APPDATA%)' : ''}`);
+  if (L.configError) log('warn', `config.json illisible (${L.configError}) : valeurs par défaut utilisées. Corrigez le fichier (JSON valide) ou supprimez-le.`);
   log('info', `Bridge prêt. Dans DeoVR, entre l'une de ces adresses :`);
   log('info', `  http://localhost:${cfg.port}   (DeoVR sur ce PC)`);
   if (cfg.bindHost === '0.0.0.0') for (const n of nets) log('info', `  http://${n.address}:${cfg.port}   (casque autonome / autre appareil)`);
   log('info', `Dans le casque : tape l'adresse ci-dessus, DeoVR affiche sa bibliothèque (onglet « En cours » en premier, puis « Plus de seeds », « Nouveautés », un onglet par catalogue Stremio).`);
   log('info', `Recherche dans le casque : tape  <adresse>/s/mot  (ex. http://${(nets[0] || { address: 'localhost' }).address}:${cfg.port}/s/avatar). Page web façon deovr.com (PC) : http://localhost:${cfg.port}/ui`);
-  log('info', `Test des liens deovr:// : http://localhost:${cfg.port}/t  |  Suivi : /status  |  États : /debug/downloads  |  Journaux : bridge-debug.log, bridge-bilans.log`);
+  log('info', `Test des liens deovr:// : http://localhost:${cfg.port}/t  |  Suivi : /status  |  États : /debug/downloads  |  Journaux : data\\bridge-debug.log`);
   if (cfg.dev) log('info', `Mode développeur : tous les points d'observation sur http://localhost:${cfg.port}/dev ; ffmpeg détaillé dans le journal.`);
   if (L.cfg.ffmpeg === 'ffmpeg') log('info', 'ffmpeg : celui du PATH (aucun ffmpeg fourni à côté de l\'application).');
   selfCheck();
@@ -68,7 +71,7 @@ start().then(() => {
     log('info', `Connexion à Stremio : ouverture de ${setupUrl} dans votre navigateur (si rien ne s'ouvre, copiez cette adresse).`); openUrl(setupUrl);
   }
 }).catch(e => {
-  const msg = e.code === 'EADDRINUSE' ? `le port ${cfg.port} est déjà utilisé : le pont tourne sans doute déjà (autre fenêtre ouverte ?). Fermez-la ou changez le port (--port 8081 ou "port" dans config.json).`
+  const msg = e.code === 'EADDRINUSE' ? `le port ${cfg.port} est déjà utilisé : le pont tourne sans doute déjà (autre fenêtre ouverte ?). Fermez-la ou changez le port (--port 4478 ou "port" dans config.json).`
     : e.code === 'EACCES' ? `accès refusé au port ${cfg.port} : choisissez un port au-dessus de 1024.` : e.stack || e.message;
   log('error', 'Impossible de démarrer : ' + msg); console.error('\nIMPOSSIBLE DE DÉMARRER : ' + msg);
   if (isSea) waitKey(2); else process.exit(2);   // code 2 : start.bat ne relance pas

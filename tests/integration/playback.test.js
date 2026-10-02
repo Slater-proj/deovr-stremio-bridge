@@ -117,3 +117,26 @@ describe('fiabilité', { skip: !HAS_FFMPEG && 'ffmpeg absent' }, () => {
     } finally { await bridge.stop(); await mocks.close(); }
   });
 });
+
+const HAS_X265 = HAS_FFMPEG && (() => { try { return /libx265/.test(cp.spawnSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8' }).stdout); } catch { return false; } })();
+describe('film HEVC : le lecteur DeoVR ne décode pas le HEVC dans un flux HLS', { skip: !HAS_X265 && 'ffmpeg sans libx265' }, () => {
+  let mocks, bridge;
+  before(async () => { mocks = await startMocks({ film: makeFilm(40, '', 'hevc').data }); bridge = await startBridge(mocks, {}); });
+  after(async () => { await bridge.stop(); await mocks.close(); });
+
+  test('chargement H.264 -> « PRÊT, relancez » -> la fiche propose ensuite le fichier direct (jamais de HEVC dans la playlist)', { timeout: 120000 }, async () => {
+    const url = await filmUrl(bridge, 1);
+    assert.match(url, /\/live\/\w{40}\/0\/index\.m3u8$/, 'premier clic : écran de chargement');
+    assert.match((await (await fetch(url)).text()), /w0_0\.ts/);
+    const ready = await bridge.waitFor(async () => { const x = (await sessions(bridge))[0]; return x && x.filmPret && x; }, 60000, 500);
+    assert.ok(ready, 'film HEVC prêt');
+    const pl = await (await fetch(url)).text();
+    assert.ok(!/real\//.test(pl) && !/DISCONTINUITY/.test(pl) && !/ENDLIST/.test(pl), 'aucun segment HEVC dans le flux HLS :\n' + pl);
+    const before = (pl.match(/#EXTINF/g) || []).length; await sleep(4500);
+    assert.ok(((await (await fetch(url)).text()).match(/#EXTINF/g) || []).length >= before, 'l\'écran de chargement continue (message « relancez »)');
+    const direct = await filmUrl(bridge, 1);
+    assert.match(direct, /\/torrent\/\w{40}\/0\/video\.mp4/, 'la fiche rafraîchie propose le fichier direct');
+    const r = await fetch(direct, { headers: { range: 'bytes=0-1023' } }); assert.equal(r.status, 206); assert.equal((await r.arrayBuffer()).byteLength, 1024);
+    assert.match(JSON.stringify(await bridge.json('/debug/live')), /hevc/i, 'codec HEVC mesuré par ffmpeg');
+  });
+});

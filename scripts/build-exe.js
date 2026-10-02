@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Fabrique l'archive portable Windows : DeoVR-Stremio-Bridge.exe (Node intégré, « single executable application ») + ffmpeg + outils.
-//   node scripts/build-exe.js [--ffmpeg-dir <dossier avec ffmpeg(.exe) et ffprobe(.exe)>] [--no-ffmpeg] [--keep]
+//   node scripts/build-exe.js [--profile release|debug|both] [--ffmpeg-dir <dossier avec ffmpeg(.exe) et ffprobe(.exe)>] [--no-ffmpeg] [--keep]
+//   release : exe + resources\ (ffmpeg, vidéos de test) + docs\GUIDE-RAPIDE.txt + licences. Rien d'autre ; config.json est créé au 1er lancement.
+//   debug   : release + utility\ (.bat d'outillage + descriptif) + docs\DEBUG.txt.      both (défaut) : les deux archives, un seul exe.
 // Variables : BUILD_SUFFIX (ex. -dev.57.abc1234), GITHUB_SHA.  Sans dépendance du projet ; l'injection utilise `postject` (outil de build épinglé, via npx).
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 const { writeZip } = require('./lib/zip');
@@ -36,8 +38,11 @@ if (args.includes('--bundle-only')) { console.log(bundle); process.exit(0); }
 
 // 2. exécutable : binaire Node + blob SEA. Node récent : `node --build-sea` (rien à télécharger) ; sinon `postject` (outil de build épinglé, via npx).
 const exe = path.join(work, exeName), blob = path.join(work, 'sea-prep.blob'), cfgFile = path.join(work, 'sea-config.json');
+const simulate = args.includes('--simulate');   // essai hors Windows : « exe » = petit lanceur sh + bundle.js (BRIDGE_APP_DIR), pour tester l'assemblage des archives et le test de fumée
 const hasBuildSea = !args.includes('--postject') && /--build-sea/.test(cp.spawnSync(process.execPath, ['--help'], { encoding: 'utf8' }).stdout || '');
-if (hasBuildSea) {
+if (simulate) {
+  fs.writeFileSync(exe, `#!/bin/sh\nD="$(cd "$(dirname "$0")" && pwd)"\nBRIDGE_APP_DIR="$D" exec node "$D/bundle.js" "$@"\n`); fs.chmodSync(exe, 0o755);
+} else if (hasBuildSea) {
   fs.writeFileSync(cfgFile, JSON.stringify({ main: bundle, output: exe, disableExperimentalSEAWarning: true }));
   run(process.execPath, ['--build-sea', cfgFile]);
 } else {
@@ -46,27 +51,36 @@ if (hasBuildSea) {
   fs.copyFileSync(process.execPath, exe); if (!isWin) fs.chmodSync(exe, 0o755);
   run('npx', ['--yes', POSTJECT, exe, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', FUSE, ...(process.platform === 'darwin' ? ['--macho-segment-name', 'NODE_SEA'] : [])]);
 }
-console.log(`méthode d'injection : ${hasBuildSea ? 'node --build-sea' : 'postject'} (Node ${process.version})`);
+console.log(`méthode d'injection : ${simulate ? 'SIMULATION (lanceur sh)' : hasBuildSea ? 'node --build-sea' : 'postject'} (Node ${process.version})`);
 const v = cp.spawnSync(exe, ['--version'], { encoding: 'utf8', timeout: 30000 });
 if (v.status !== 0 || !v.stdout.includes(version)) throw new Error(`l'exécutable fabriqué ne démarre pas correctement (--version) : ${v.stdout} ${v.stderr}`);
 console.log(`exécutable OK : ${path.basename(exe)} ${v.stdout.trim()} (${(fs.statSync(exe).size / 1e6).toFixed(0)} Mo)`);
 
-// 3. contenu de l'archive
-const entries = [{ name: exeName, file: exe, exec: true }];
-for (const f of fs.readdirSync(path.join(bridge, 'test'))) entries.push({ name: 'test/' + f, file: path.join(bridge, 'test', f) });
-for (const f of fs.readdirSync(path.join(root, 'packaging', 'windows'))) entries.push({ name: f, file: path.join(root, 'packaging', 'windows', f), crlf: /\.(bat|txt)$/i.test(f) });
-for (const f of ['LICENSE', 'README.md', 'README.fr.md', 'CHANGELOG.md']) entries.push({ name: f, file: path.join(root, f) });
-(function walk(d, b) { for (const n of fs.readdirSync(d, { withFileTypes: true })) n.isDirectory() ? walk(path.join(d, n.name), b + n.name + '/') : entries.push({ name: b + n.name, file: path.join(d, n.name) }); })(path.join(root, 'docs'), 'docs/');
-entries.push({ name: 'config.example.json', file: path.join(bridge, 'config.example.json') });
-entries.push({ name: 'BUILD-INFO.txt', crlf: true, data: Buffer.from([suffix ? 'BUILD DE TEST (non publié)' : 'Version stable', `Version : ${version}${suffix}`, `Commit  : ${build.commit || 'inconnu'}`, `Date    : ${build.date}`, `Cible   : ${tag}`, ''].join('\n')) });
+// 3. contenu des archives (profils)
+const pk = path.join(root, 'packaging', 'windows'), profile = arg('--profile') || 'both';
+if (!['release', 'debug', 'both'].includes(profile)) throw new Error('--profile release|debug|both');
+const list = d => fs.readdirSync(d, { withFileTypes: true });
+const text = f => /\.(bat|txt)$/i.test(f);
+const common = [{ name: exeName, file: exe, exec: true }];
+if (simulate) common.push({ name: 'bundle.js', file: bundle });
+for (const f of fs.readdirSync(path.join(bridge, 'test'))) common.push({ name: 'resources/test/' + f, file: path.join(bridge, 'test', f) });
+common.push({ name: 'docs/GUIDE-RAPIDE.txt', file: path.join(pk, 'docs', 'GUIDE-RAPIDE.txt'), crlf: true });
+common.push({ name: 'docs/licences/THIRD-PARTY-NOTICES.txt', file: path.join(pk, 'docs', 'licences', 'THIRD-PARTY-NOTICES.txt'), crlf: true });
+common.push({ name: 'docs/licences/LICENSE-DeoVR-Stremio-Bridge.txt', file: path.join(root, 'LICENSE'), crlf: true });
+common.push({ name: 'docs/BUILD-INFO.txt', crlf: true, data: Buffer.from([suffix ? 'BUILD DE TEST (non publié)' : 'Version stable', `Version : ${version}${suffix}`, `Commit  : ${build.commit || 'inconnu'}`, `Date    : ${build.date}`, `Cible   : ${tag}`, ''].join('\n')) });
 if (!args.includes('--no-ffmpeg')) {
   const dir = arg('--ffmpeg-dir') || process.env.FFMPEG_DIR; if (!dir) throw new Error('--ffmpeg-dir <dossier> (ou FFMPEG_DIR) requis, ou --no-ffmpeg pour un essai sans ffmpeg');
   const bins = (isWin ? ['ffmpeg.exe', 'ffprobe.exe'] : ['ffmpeg', 'ffprobe']);
-  for (const b of bins) { const f = path.join(dir, b); if (!fs.existsSync(f)) throw new Error(`${f} introuvable`); entries.push({ name: 'ffmpeg/' + b, file: f, exec: true }); }
+  for (const b of bins) { const f = path.join(dir, b); if (!fs.existsSync(f)) throw new Error(`${f} introuvable`); common.push({ name: 'resources/ffmpeg/' + b, file: f, exec: true }); }
   const lic = ['LICENSE.txt', 'LICENSE', 'COPYING.GPLv3', 'README.txt'].map(n => [path.join(dir, n), path.join(dir, '..', n)]).flat().find(f => fs.existsSync(f));
-  entries.push({ name: 'ffmpeg/LICENSE.txt', ...(lic ? { file: lic } : { data: Buffer.from('FFmpeg est distribué sous licence GNU GPL v3 pour cette construction : voir THIRD-PARTY-NOTICES.txt et https://ffmpeg.org/legal.html\n') }) });
+  common.push({ name: 'resources/ffmpeg/LICENSE.txt', ...(lic ? { file: lic } : { data: Buffer.from('FFmpeg est distribué sous licence GNU GPL v3 pour cette construction : voir docs/licences/THIRD-PARTY-NOTICES.txt et https://ffmpeg.org/legal.html\n') }) });
 }
-const zip = path.join(dist, `DeoVR-Stremio-Bridge-v${version}${suffix}-${tag}.zip`);
-writeZip(entries, zip, { prefix: 'DeoVR-Stremio-Bridge/' });
-console.log(`${path.relative(root, zip)} : ${entries.length} fichiers, ${(fs.statSync(zip).size / 1e6).toFixed(1)} Mo`);
+const debugOnly = [{ name: 'docs/DEBUG.txt', file: path.join(pk, 'docs', 'DEBUG.txt'), crlf: true }];
+for (const n of list(path.join(pk, 'utility'))) debugOnly.push({ name: 'utility/' + n.name, file: path.join(pk, 'utility', n.name), crlf: text(n.name) });
+for (const p of profile === 'both' ? ['release', 'debug'] : [profile]) {
+  const entries = p === 'debug' ? [...common, ...debugOnly] : common;
+  const zip = path.join(dist, `DeoVR-Stremio-Bridge-v${version}${suffix}-${tag}${p === 'debug' ? '-debug' : ''}.zip`);
+  writeZip(entries, zip, { prefix: 'DeoVR-Stremio-Bridge/' });
+  console.log(`${path.relative(root, zip)} [${p}] : ${entries.length} fichiers, ${(fs.statSync(zip).size / 1e6).toFixed(1)} Mo`);
+}
 if (!args.includes('--keep')) fs.rmSync(work, { recursive: true, force: true });

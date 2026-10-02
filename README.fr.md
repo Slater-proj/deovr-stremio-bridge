@@ -31,14 +31,14 @@ Conçu avec un Pimax Dream Air et une RTX 4090 ; les autres casques PCVR utilisa
 - **Pensé pour durer** : ffmpeg est relancé à la bonne position s'il plante, les segments déjà vus sont supprimés quand le disque se remplit, la taille du cache Stremio est contrôlée, un message clair s'affiche si Stremio n'est pas lancé, et `start.bat` (variante Node.js) relance le pont s'il s'arrête.
 - **Portable, sans installation** : un seul `DeoVR-Stremio-Bridge.exe` avec Node.js et ffmpeg dans le zip ; tout ce qu'il écrit reste dans un dossier `data\` à côté. Supprimer le dossier supprime tout.
 - **Votre mot de passe Stremio n'est jamais enregistré.** Connexion une seule fois sur une page locale (`/setup`, accessible depuis le PC uniquement) ; le pont garde une clé de session chiffrée par Windows (DPAPI).
-- **Mode développeur** (`--dev` / `LANCER-MODE-DEV.bat`) : console détaillée, sortie d'ffmpeg, page `/dev`, et `RAPPORT-SUPPORT.bat` qui écrit un rapport (secrets masqués) avec tout ce qu'il faut pour déboguer.
-- **Diagnostic intégré** : `DIAGNOSTIC.bat`, rapport d'assistance, journaux par clic, bilan par film, `/status`, `/debug/downloads`.
+- **Mode développeur** (`--dev` / `utility\LANCER-MODE-DEV.bat` dans le zip debug) : console détaillée, sortie d'ffmpeg, page `/dev`, et `--report` (`utility\RAPPORT-SUPPORT.bat`) qui écrit un rapport (secrets masqués) avec tout ce qu'il faut pour déboguer.
+- **Diagnostic intégré** : `--diagnose`, rapport d'assistance, journaux par clic, bilan par film, `/status`, `/debug/downloads`.
 
 ## Comment ça marche
 
 ```mermaid
 flowchart LR
-    D["DeoVR<br/>navigateur + lecteur"] -- "bibliothèque /deovr, liens" --> B(("Pont<br/>:8080"))
+    D["DeoVR<br/>navigateur + lecteur"] -- "bibliothèque /deovr, liens" --> B(("Pont<br/>:4477"))
     B -- "catalogues + flux" --> A["Addons Stremio"]
     B -- "création / stats / flux" --> S["Serveur de streaming Stremio<br/>:11470"]
     S -- "torrent" --> P["Pairs"]
@@ -66,11 +66,11 @@ Détails : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 1. Téléchargez `DeoVR-Stremio-Bridge-vX.Y.Z-windows-x64.zip` depuis la dernière [Release](../../releases/latest) et décompressez-le où vous voulez (pas dans *Program Files*).
 2. Lancez Stremio, puis double-clic sur **`DeoVR-Stremio-Bridge.exe`**. Windows SmartScreen peut avertir (exe non signé) : *Informations complémentaires → Exécuter quand même*.
 3. Première fois seulement : le navigateur s'ouvre sur une page de connexion locale — saisissez e-mail et mot de passe Stremio une fois.
-4. Dans le navigateur de DeoVR, tapez `http://localhost:8080`.
+4. Dans le navigateur de DeoVR, tapez `http://localhost:4477`.
 
-La fenêtre noire est la console du pont (fermer = arrêter). Tout (réglages, clé chiffrée, journaux, fichiers temporaires) reste dans `data\` à côté de l'exe. Détails, options et variante Node.js : [docs/INSTALL.md](docs/INSTALL.md).
+La fenêtre noire est la console du pont (fermer = arrêter). Les réglages sont dans `config.json`, créé à côté de l'exe au premier lancement (port par défaut **4477**, modifiable là) ; tout ce que le pont écrit (clé chiffrée, journaux, fichiers temporaires) reste dans `data\`. Détails, options et variante Node.js : [docs/INSTALL.md](docs/INSTALL.md).
 
-Facultatif : `DEMARRAGE-AUTO.bat` lance le pont avec Windows ; `PARE-FEU.bat` ouvre le pare-feu pour un autre appareil ; `LANCER-MODE-DEV.bat` démarre en mode développeur ; `RAPPORT-SUPPORT.bat` fabrique le rapport d'assistance.
+Deux zips sont publiés : **release** (exe + `resources\` + `docs\`, rien d'autre) et **debug** (le même plus un dossier `utility\` : mode développeur, rapport d'assistance, diagnostic, pare-feu, démarrage automatique ; chaque outil est décrit dans `utility\LISEZMOI-UTILITAIRES.txt`).
 
 ## Sécurité de votre compte Stremio
 

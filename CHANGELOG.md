@@ -4,9 +4,20 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Corrigé (test au casque du 02/10)
+- **Écran de chargement toujours en H.264** (avant : HEVC pour les films 6K+). Les journaux montrent que le lecteur de DeoVR relance le flux depuis le début **exactement 15 s** après son démarrage quand il est en HEVC, alors qu'un écran de chargement en H.264 tourne sans problème. Même cause pour les films HEVC 8K envoyés en HLS (dont le film « prêt » qui chargeait à l'infini).
+- **Films non H.264 (HEVC…)** : l'écran de chargement s'affiche tout de suite, pendant la mise en tampon ; quand le film est prêt il indique « PRÊT, appuyez sur RETOUR puis relancez le film » (le HEVC n'est plus jamais mis dans le flux HLS) ; au clic suivant la fiche propose le fichier direct (lecture immédiate, mode VR habituel). Option `hevcDirect` (vrai par défaut).
+- L'écran de chargement n'attend plus 3 s avant d'apparaître (`firstWaitMs` = 0 par défaut).
+- La fiche vidéo n'est plus servie depuis un cache périmé après un changement d'état (film prêt) ; réponses JSON avec `Cache-Control: no-store` (DeoVR gardait la bibliothèque en mémoire).
+- Pastilles : seulement les seeders (`[S12]`), plus la qualité (déjà dans le titre).
+- Nouvel `id` de fiche : DeoVR mémorise les réglages d'une vidéo (dont le mode d'affichage) par son `id` ; ceux d'anciens essais ratés sont ainsi oubliés.
+- Journaux et bilans : détection d'un lecteur qui redémarre le flux (`ouvertures_du_flux_a_s`).
+
 ### Ajouté
+- **Banc de test casque** (onglet *Test pont* : Labo 1 à 6, générés au démarrage par ffmpeg, aucune dépendance) : H.264/HEVC × HLS TS/fMP4 × MP4 direct, bascule chargement → film HEVC, déclaration par `path` ; verdict automatique dans `/debug/labo` et dans le rapport d'assistance.
+- Fiche « Mode d'emploi » dans l'onglet *Test pont* : où trouver le menu latéral et la recherche (`/ui`, `/s/mot`), absents de la liste native de DeoVR.
 - **Exe portable** `DeoVR-Stremio-Bridge.exe` (Node.js embarqué, *Single Executable Application*) dans un zip avec ffmpeg, aucune installation. Fabriqué et testé par la CI Windows ; publié avec chaque release et dans la pré-release `dev-build`.
-- **Tout au même endroit** : configuration, clé, journaux, état et fichiers temporaires dans `data\` à côté de l'exe (`%APPDATA%` seulement si ce dossier est en lecture seule ; `--data-dir` / `BRIDGE_DATA_DIR` pour choisir).
+- **Tout au même endroit** : `config.json` (réglages) à côté de l'exe, créé au premier lancement ; clé, journaux, état et fichiers temporaires dans `data\` (`%APPDATA%` seulement si ce dossier est en lecture seule ; `--data-dir` / `BRIDGE_DATA_DIR` pour choisir).
 - **Compte Stremio sécurisé** : page de connexion locale `/setup` (loopback uniquement, anti-CSRF et anti-*DNS rebinding*, jeton, limitation d'essais). Le mot de passe n'est plus enregistré : une clé de session est stockée chiffrée avec Windows DPAPI (`secrets.dat`). Migration automatique des anciens `email`/`password` de `config.json`. `--login`, `--logout`.
 - **Mode développeur** `--dev` (journaux détaillés, sortie d'ffmpeg, page `/dev`), `--report` (rapport d'assistance), `--diagnose`, `--version`, `--help`, `--port`, `--no-browser`. Lanceurs `LANCER-MODE-DEV.bat`, `RAPPORT-SUPPORT.bat`, `DIAGNOSTIC.bat`.
 - `/debug` indique version, état du compte (sans secret) et chemins ; le rapport d'assistance mentionne mode de stockage et compte.
@@ -14,6 +25,10 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 - Tests : `account`, `bundle`, `paths`, `secrets`, `cli`.
 
 ### Changé
+- **Port par défaut 4477** au lieu de 8080 (très utilisé par d'autres logiciels). Réglable dans `config.json`, par `--port N` ou la variable `PORT`.
+- **Zips minimaux** : *release* = exe + `resources\` (ffmpeg, vidéos de test) + `docs\GUIDE-RAPIDE.txt` + licences ; *debug* = release + `utility\` (outils `.bat` décrits dans `LISEZMOI-UTILITAIRES.txt`, dont `EDITER-REGLAGES.bat`) + `docs\DEBUG.txt`. Plus de README/CHANGELOG/docs du dépôt dans l'archive. Les releases ne publient plus le zip « version Node » (toujours fabriqué par `npm run build`).
+- `"dev": true` dans `config.json` active le mode développeur sans option de ligne de commande.
+- Console plus claire : une seule bannière, alerte « Stremio n'est pas lancé » émise une fois, catalogues d'addons trop lents regroupés en une alerte (et relancés en arrière-plan avec plus de patience), ligne d'état de l'analyse des films en clair (« 72 classés [14 très bons, 35 corrects…] »).
 - `config.example.json` ne contient plus d'e-mail ni de mot de passe.
 - Fichiers temporaires (vignettes, segments HLS) dans `data\tmp` au lieu de `%TEMP%`.
 - `INSTALL.bat` (variante Node) n'interroge plus l'e-mail/mot de passe ; `bridge/setup.js` supprimé.

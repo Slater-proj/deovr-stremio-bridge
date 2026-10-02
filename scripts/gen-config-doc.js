@@ -6,12 +6,12 @@ const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), src = fs.readFileSync(path.join(root, 'bridge', 'lib.js'), 'utf8');
 const block = src.slice(src.indexOf('const cfg = {'), src.indexOf('const VERSION'));
 const EXTRA = {   // clés sans commentaire dans lib.js
-  port: 'port du pont (8080 par défaut ; c\'est l\'adresse à taper dans DeoVR)', email: 'e-mail du compte Stremio (pour lire la liste de vos addons)', password: 'mot de passe du compte Stremio', authKey: 'alternative à email/mot de passe : clé d\'authentification Stremio',
+  port: 'port du pont (4477 par défaut, peu courant pour éviter les conflits ; c\'est l\'adresse à taper dans DeoVR). `--port N` ou la variable PORT l\'emportent', email: 'ANCIEN réglage : e-mail Stremio. Inutile désormais (connexion par la page /setup) ; s\'il est présent avec `password`, il est migré au premier lancement puis le mot de passe est effacé', password: 'ANCIEN réglage (voir `email`) : n\'est plus jamais enregistré par le pont', authKey: 'alternative à email/mot de passe : clé d\'authentification Stremio',
   localStremio: 'adresse du serveur de streaming de Stremio (lancé avec l\'application Stremio)', catalogInclude: 'ne garder que les catalogues dont le nom contient ce texte', catalogExclude: 'masquer les catalogues dont le nom contient ce texte',
   genreTabs: 'un onglet par genre pour les catalogues qui en proposent', maxTabs: 'nombre maximum d\'onglets dans DeoVR', itemsPerTab: 'films par onglet', types: 'types Stremio affichés', cacheMinutes: 'durée de mémorisation des catalogues (minutes)',
   remux: 'autorise la conversion avec ffmpeg (MKV, écran de chargement, vignettes) ; false = lecture directe uniquement',
   debug: 'journaux détaillés (aussi : variable d\'environnement DEBUG=1)' };
-const DEF = { port: '8080', email: '""', password: '""', authKey: '""', localStremio: '"http://127.0.0.1:11470"', localStremioPublic: '"" (automatique)', debug: 'false', bindHost: '"0.0.0.0"' };
+const DEF = { port: '4477', email: '""', password: '""', authKey: '""', localStremio: '"http://127.0.0.1:11470"', localStremioPublic: '"" (automatique)', debug: 'false', bindHost: '"0.0.0.0"' };
 const rows = [];
 for (const line of block.split('\n')) {
   const m = /^  (\w+):\s*(.*?),?\s+(?:\/\/\s*(.*))?$|^  (\w+):\s*(.*?),?\s*$/.exec(line); if (!m) continue;

@@ -1,9 +1,11 @@
 'use strict';
 // Où vivent les fichiers du pont. Règle : TOUT au même endroit, rien de dispersé sur le PC.
-//   exe autonome  -> <dossier de l'exe>\data\   (config, clé Stremio chiffrée, journaux, état, temporaires) ; supprimer le dossier supprime tout
-//   node server.js -> le dossier du code (comme avant)
-//   BRIDGE_DATA_DIR / --data-dir <dossier> -> ce dossier (tests, installation séparée)
-//   config.json à côté de l'exe (ancienne installation portable) -> ce dossier
+//   exe autonome  -> <dossier de l'exe>\config.json   réglages de l'utilisateur (créé au 1er lancement, à éditer)
+//                    <dossier de l'exe>\data\          clé Stremio chiffrée, journaux, état, temporaires (supprimable)
+//                    <dossier de l'exe>\resources\     ffmpeg et vidéos de test (fournis avec l'exe)
+//   node server.js -> le dossier du code (comme avant : config.json, journaux, ffmpeg et test/ au même endroit)
+//   BRIDGE_DATA_DIR / --data-dir <dossier> -> ce dossier pour les données ET config.json (tests, installation séparée) ; BRIDGE_CONFIG impose le fichier de réglages
+//   ancienne installation : <data>\config.json lu si aucun config.json à côté de l'exe
 //   dernier recours : dossier de l'exe non inscriptible (ex. Program Files) -> %APPDATA%\DeoVR-Stremio-Bridge
 const fs = require('fs'), path = require('path'), os = require('os');
 
@@ -30,10 +32,12 @@ function resolve(argv, env = process.env) {
   const forced = env.BRIDGE_DATA_DIR || argOf('--data-dir', argv);
   if (forced) { dataDir = path.resolve(forced); mode = 'impose'; }
   else if (!sea) { dataDir = appDir; mode = 'dossier-du-code'; }
-  else if (fs.existsSync(path.join(appDir, 'config.json'))) { dataDir = appDir; mode = 'portable-ancien'; }
   else if (writable(path.join(appDir, 'data'))) { dataDir = path.join(appDir, 'data'); mode = 'portable'; }
   else { dataDir = fallbackDir(); mode = 'appdata'; }
   try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
-  const r = { sea, appDir, dataDir, tmpDir: path.join(dataDir, 'tmp'), mode }; if (implicit) memo = r; return r;
+  // réglages : à côté de l'exe (exe), dans le dossier du code (node), ou dans le dossier de données imposé
+  const defaultConfig = mode === 'impose' ? path.join(dataDir, 'config.json') : path.join(appDir, 'config.json'), legacy = path.join(dataDir, 'config.json');
+  const configFile = env.BRIDGE_CONFIG ? path.resolve(env.BRIDGE_CONFIG) : (!fs.existsSync(defaultConfig) && fs.existsSync(legacy)) ? legacy : defaultConfig;
+  const r = { sea, appDir, dataDir, resDir: sea ? path.join(appDir, 'resources') : appDir, configFile, tmpDir: path.join(dataDir, 'tmp'), mode }; if (implicit) memo = r; return r;
 }
 module.exports = { resolve, isSea, argOf, writable, userArgs };

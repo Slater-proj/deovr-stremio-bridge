@@ -16,8 +16,10 @@ ok('aucun fichier local (config.json, journaux, rapports)');
 const ex = JSON.parse(fs.readFileSync(path.join(root, 'bridge', 'config.example.json'), 'utf8'));
 if ('email' in ex || 'password' in ex || 'authKey' in ex) fail('config.example.json ne doit contenir aucun identifiant : la connexion Stremio passe par la page /setup (clé chiffrée)');
 ok('config.example.json : aucun identifiant');
-for (const f of ['packaging/windows/LISEZMOI.txt', 'packaging/windows/THIRD-PARTY-NOTICES.txt', 'packaging/windows/LANCER-MODE-DEV.bat', 'packaging/windows/RAPPORT-SUPPORT.bat', 'packaging/windows/DIAGNOSTIC.bat', 'packaging/windows/PARE-FEU.bat']) if (!fs.existsSync(path.join(root, f))) fail(`fichier de packaging manquant : ${f}`);
+for (const f of ['docs/GUIDE-RAPIDE.txt', 'docs/DEBUG.txt', 'docs/licences/THIRD-PARTY-NOTICES.txt', 'utility/LISEZMOI-UTILITAIRES.txt', 'utility/LANCER-MODE-DEV.bat', 'utility/RAPPORT-SUPPORT.bat', 'utility/DIAGNOSTIC.bat', 'utility/EDITER-REGLAGES.bat', 'utility/PARE-FEU.bat', 'utility/DEMARRAGE-AUTO.bat', 'utility/DEMARRAGE-AUTO-RETIRER.bat'].map(n => 'packaging/windows/' + n)) if (!fs.existsSync(path.join(root, f))) fail(`fichier de packaging manquant : ${f}`);
 ok('fichiers de packaging Windows présents');
+for (const f of fs.readdirSync(path.join(root, 'packaging', 'windows', 'utility')).filter(n => /\.bat$/i.test(n))) if (!fs.readFileSync(path.join(root, 'packaging', 'windows', 'utility', 'LISEZMOI-UTILITAIRES.txt'), 'utf8').includes(f)) fail(`utility/${f} n'est pas décrit dans LISEZMOI-UTILITAIRES.txt`);
+ok('chaque outil de utility est décrit');
 for (const f of ['ci.yml', 'release.yml']) { const t = fs.readFileSync(path.join(root, '.github', 'workflows', f), 'utf8'); if (/\t/.test(t)) fail(`tabulation dans .github/workflows/${f} (YAML invalide)`); }
 ok('workflows : pas de tabulation');
 for (const f of all.filter(f => /\.(js|md|json|yml|bat)$/.test(f) && !/package-lock/.test(f))) {

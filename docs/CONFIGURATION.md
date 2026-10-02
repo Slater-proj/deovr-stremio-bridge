@@ -8,10 +8,10 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 
 | Clé | Valeur par défaut | Rôle |
 |---|---|---|
-| `port` | `8080` | port du pont (8080 par défaut ; c'est l'adresse à taper dans DeoVR) |
+| `port` | `4477` | port du pont, 4477 par défaut (peu courant : 8080 est pris par beaucoup de logiciels) ; --port N ou la variable PORT l'emportent |
 | `bindHost` | `"0.0.0.0"` | '127.0.0.1' = accessible uniquement depuis ce PC (PCVR) ; '0.0.0.0' = aussi depuis le réseau local (casque autonome) |
-| `email` | `""` | e-mail du compte Stremio (pour lire la liste de vos addons) |
-| `password` | `""` | mot de passe du compte Stremio |
+| `email` | `""` | ANCIEN réglage, inutile : la connexion se fait par la page /setup ; migré puis effacé s'il est présent avec password |
+| `password` | `""` | ANCIEN réglage (voir email) : jamais réécrit par le pont |
 | `authKey` | `""` | alternative à email/mot de passe : clé d'authentification Stremio |
 | `addonUrls` | `(env.ADDON_URLS ? env.ADDON_URLS.split(',') : [])` | optionnel : manifests en dur (tests) |
 | `localStremio` | `"http://127.0.0.1:11470"` | adresse du serveur de streaming de Stremio (lancé avec l'application Stremio) |
@@ -54,7 +54,7 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `minBufferSec` | `20` | tampon minimum (secondes de film converties) avant de passer de l'écran de chargement au film |
 | `maxAheadMin` | `30` | ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur |
 | `maxAheadMB` | `4000` | ... ni plus de N Mo de segments temporaires d'avance (films 8K très lourds) |
-| `firstWaitMs` | `3000` | attente max avant de répondre à la 1re demande du lecteur : si le film est prêt avant, il démarre sans écran de chargement |
+| `firstWaitMs` | `0` | attente max avant de répondre à la 1re demande du lecteur (0 = l'écran de chargement apparaît tout de suite) |
 | `patientMaxMin` | `45` | débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance |
 | `landscapeThumbs` | `true` | vignettes 16:9 composées (DeoVR affiche en paysage) ; false = affiche Stremio brute |
 | `stremioPingMs` | `15000` | fréquence du test « Stremio répond-il ? » |
@@ -64,12 +64,13 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `trimKeepSec` | `300` | ... en gardant ce nombre de secondes derrière le lecteur |
 | `loaderMaxMin` | `30` | l'écran de chargement s'arrête après N min sans aucune donnée |
 | `loadingScreen` | `'always'` | écran de chargement HLS à CHAQUE clic sur un torrent : 'always' \| 'auto' (seulement si pas déjà prêt) \| 'off' |
-| `loadingCodec` | `'auto'` | codec de l'écran d'attente : auto (HEVC si film 6K+), h264, hevc |
+| `hevcDirect` | `true` | film non H.264 (HEVC...) : le lecteur DeoVR ne le décode pas dans un flux HLS -> écran de chargement, puis lecture directe au clic suivant (true) ou tentative HLS (false) |
+| `loadingCodec` | `'h264'` | codec de l'écran d'attente : h264 (seul codec que le lecteur DeoVR/Windows décode dans un flux HLS : mesuré au casque) ; hevc seulement pour des essais |
 | `asciiBadges` | `true` | DeoVR n'affiche pas les emoji dans ses listes : pastilles en texte [+++] [++] [+] [x] [?] |
 | `jsonDeadlineMs` | `8000` | DeoVR abandonne une fiche vidéo après ~10 s : on répond toujours avant |
 | `dnsMode` | `—` | auto : DNS du PC puis DNS public si échec \| public : DNS public d'abord \| system : DNS du PC seulement |
 | `publicDns` | `['1.1.1.1', '8.8.8.8', '9.9.9.9']` |  |
 | `debug` | `false` | journaux détaillés (aussi : variable d'environnement DEBUG=1) |
-| `dev` | `!!env.BRIDGE_DEV` | mode développeur (--dev) : journaux détaillés, ffmpeg bavard, page /dev |
+| `dev` | `—` | mode développeur (--dev, ou "dev": true dans config.json) : journaux détaillés, ffmpeg bavard, page /dev |
 | `stremioApi` | `—` | API du compte Stremio (changer seulement pour les tests) |
 | `tempDir` | `—` | vignettes et segments de lecture (peut être placé sur un autre disque) |

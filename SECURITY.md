@@ -21,7 +21,7 @@ Accessible **uniquement depuis le PC lui-même** (adresse source loopback), mêm
 ## Exécutable et logiciels tiers
 
 - L'exe n'est **pas signé** (pas de certificat de signature de code) : SmartScreen avertit au premier lancement. Vérifiez que vous l'avez téléchargé depuis la page *Releases* de ce dépôt ; il est fabriqué par GitHub Actions à partir du code public (`BUILD-INFO.txt` donne le commit).
-- Le zip embarque **ffmpeg** (licence GPL v3) comme programme séparé : voir `THIRD-PARTY-NOTICES.txt` et `ffmpeg\LICENSE.txt`.
+- Le zip embarque **ffmpeg** (licence GPL v3) comme programme séparé : voir `docs\licences\THIRD-PARTY-NOTICES.txt` et `resources\ffmpeg\LICENSE.txt`.
 - Aucune dépendance npm : rien d'autre que Node.js (embarqué dans l'exe) et ffmpeg.
 
 ## Signaler une vulnérabilité

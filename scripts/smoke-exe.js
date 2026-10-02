@@ -14,10 +14,15 @@ const sh = (args, o = {}) => cp.spawnSync(exe, args, { encoding: 'utf8', timeout
 
 (async () => {
   must(fs.existsSync(exe), `exécutable présent (${path.basename(exe)}, ${(fs.statSync(exe).size / 1e6).toFixed(0)} Mo)`);
-  for (const f of ['test/test-2d.mp4', 'ffmpeg/' + (win ? 'ffmpeg.exe' : 'ffmpeg'), 'ffmpeg/' + (win ? 'ffprobe.exe' : 'ffprobe'), 'LISEZMOI.txt', 'THIRD-PARTY-NOTICES.txt', 'docs/USAGE.md']) must(fs.existsSync(path.join(dir, f)), `fichier de l'archive : ${f}`);
+  const debugPkg = fs.existsSync(path.join(dir, 'utility'));
+  for (const f of ['resources/test/test-2d.mp4', 'resources/ffmpeg/' + (win ? 'ffmpeg.exe' : 'ffmpeg'), 'resources/ffmpeg/' + (win ? 'ffprobe.exe' : 'ffprobe'), 'docs/GUIDE-RAPIDE.txt', 'docs/licences/THIRD-PARTY-NOTICES.txt']) must(fs.existsSync(path.join(dir, f)), `fichier de l'archive : ${f}`);
+  if (debugPkg) for (const f of ['utility/LANCER-MODE-DEV.bat', 'utility/RAPPORT-SUPPORT.bat', 'utility/LISEZMOI-UTILITAIRES.txt', 'docs/DEBUG.txt']) must(fs.existsSync(path.join(dir, f)), `package debug : ${f}`);
+  const top = fs.readdirSync(dir).filter(n => n !== 'data' && n !== 'config.json').sort(), allowed = ['DeoVR-Stremio-Bridge' + (win ? '.exe' : ''), 'docs', 'resources'].concat(debugPkg ? ['utility'] : []).concat(fs.readdirSync(dir).filter(n => /^bundle\.js$/.test(n))).sort();
+  must(JSON.stringify(top) === JSON.stringify(allowed), `contenu de l'archive minimal (${top.join(', ')})`);
+  must(!fs.existsSync(path.join(dir, 'config.json')), 'pas de config.json avant le premier lancement (créé par le pont)');
   let r = sh(['--version']); must(r.status === 0 && r.stdout.trim().startsWith(pkg.version), `--version = ${pkg.version} (obtenu « ${r.stdout.trim()} » ${r.stderr.trim()})`);
   r = sh(['--help']); must(r.status === 0 && r.stdout.includes('--dev'), '--help');
-  const ff = cp.spawnSync(path.join(dir, 'ffmpeg', win ? 'ffmpeg.exe' : 'ffmpeg'), ['-version'], { encoding: 'utf8' }); must(ff.status === 0, 'le ffmpeg embarqué s\'exécute (' + String(ff.stdout).split('\n')[0] + ')');
+  const ff = cp.spawnSync(path.join(dir, 'resources', 'ffmpeg', win ? 'ffmpeg.exe' : 'ffmpeg'), ['-version'], { encoding: 'utf8' }); must(ff.status === 0, 'le ffmpeg embarqué s\'exécute (' + String(ff.stdout).split('\n')[0] + ')');
   must(!fs.existsSync(path.join(dir, 'data')), 'aucun dossier data avant le premier lancement (--version/--help n\'écrivent rien)');
 
   const port = await freePort(); let out = '';
@@ -31,7 +36,9 @@ const sh = (args, o = {}) => cp.spawnSync(exe, args, { encoding: 'utf8', timeout
     must(fs.existsSync(path.join(dir, 'data', 'bridge-debug.log')), 'journaux dans <dossier>\\data');
     const st = JSON.parse((await get('/status.json')).text); must(Array.isArray(st), '/status.json répond');
     const dbg = JSON.parse((await get('/debug')).text); must(path.resolve(dbg.chemins.donnees) === path.join(dir, 'data'), 'données dans <dossier>\\data (' + dbg.chemins.donnees + ')'); must(dbg.chemins.mode === 'portable', 'mode portable');
-    must(path.resolve(dbg.config.ffmpeg) === path.join(dir, 'ffmpeg', win ? 'ffmpeg.exe' : 'ffmpeg'), 'ffmpeg embarqué utilisé par le pont');
+    must(path.resolve(dbg.config.ffmpeg) === path.join(dir, 'resources', 'ffmpeg', win ? 'ffmpeg.exe' : 'ffmpeg'), 'ffmpeg embarqué (resources\\ffmpeg) utilisé par le pont');
+    must(path.resolve(dbg.chemins.reglages) === path.join(dir, 'config.json'), 'réglages : config.json à côté de l\'exe');
+    const cj = JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8')); must(cj.port === 4477 && cj._aide && !('email' in cj) && !('password' in cj), 'config.json créé au premier lancement (port 4477 par défaut, aucun identifiant)');
     must((await get('/dev')).status === 200, 'page /dev (mode développeur)');
     const setup = await get('/setup'); must(setup.status === 200 && /name="t" value="[0-9a-f]{32,}"/.test(setup.text), 'page de connexion /setup');
     must((await get('/setup', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'email=a%40b.c&password=x' })).status === 403, 'connexion refusée sans jeton');
@@ -52,6 +59,12 @@ const sh = (args, o = {}) => cp.spawnSync(exe, args, { encoding: 'utf8', timeout
   } finally {
     proc.kill(); await sleep(1500);
   }
+  // le port se règle dans config.json (à côté de l'exe), sans option de ligne de commande
+  { const p2 = await freePort(), cfgPath = path.join(dir, 'config.json'), cj = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); cj.port = p2; fs.writeFileSync(cfgPath, JSON.stringify(cj, null, 2));
+    let o2 = ''; const pr2 = cp.spawn(exe, ['--no-browser'], { cwd: dir, env: { ...process.env, PORT: '' }, windowsHide: true }); pr2.stdout.on('data', d => o2 += d); pr2.stderr.on('data', d => o2 += d);
+    try { const t = Date.now(); while (!/Bridge prêt/.test(o2)) { if (pr2.exitCode !== null || Date.now() - t > 30000) throw new Error('2e lancement impossible :\n' + o2.slice(-1500)); await sleep(200); }
+      const x = await fetch(`http://127.0.0.1:${p2}/status.json`); must(x.ok, `le port de config.json est respecté (${p2})`); await sleep(3500); must((o2.match(/Stremio n'est pas lancé/g) || []).length <= 1 && (o2.match(/=====/g) || []).length <= 2, 'avertissements non dupliqués (Stremio, bannière)'); }
+    finally { pr2.kill(); await sleep(1000); } }
   if (failed === 0) { const appdata = win ? path.join(process.env.APPDATA || '', 'DeoVR-Stremio-Bridge') : ''; must(!appdata || !fs.existsSync(appdata), 'rien n\'a été créé dans %APPDATA%'); }
   r = sh(['--logout']); must(r.status === 0, '--logout');
   console.log(failed ? `\n${failed} contrôle(s) en échec` : '\nTest de fumée de l\'archive : OK'); process.exit(failed ? 1 : 0);

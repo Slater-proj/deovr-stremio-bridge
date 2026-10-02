@@ -7,8 +7,8 @@ if errorlevel 1 (
   pause
   exit /b
 )
-set PORT=8080
-for /f %%p in ('node -e "try{console.log(require('./config.json').port||8080)}catch(e){console.log(8080)}"') do set PORT=%%p
+set PORT=4477
+for /f %%p in ('node -e "try{console.log(require('./config.json').port||4477)}catch(e){console.log(4477)}"') do set PORT=%%p
 netsh advfirewall firewall delete rule name="DeoVR Stremio Bridge" >nul 2>&1
 netsh advfirewall firewall add rule name="DeoVR Stremio Bridge" dir=in action=allow protocol=TCP localport=%PORT% profile=private
 echo.

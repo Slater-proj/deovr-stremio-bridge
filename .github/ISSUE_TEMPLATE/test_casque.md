@@ -12,7 +12,7 @@ labels: test-casque
 - Test 5 (bascule 2D) :
 - Test 6 (bascule 3D côte à côte) :
 - Liens de la page `/t` (A, C, D, E, F) :
-- Adresse nue `http://…:8080` ouvre la bibliothèque :
+- Adresse nue `http://…:4477` ouvre la bibliothèque :
 
 **Un vrai film** : titre ou type de film (sans nom d'addon ni de source) · chargement jusqu'au film OK ? · présent dans *En cours* après avoir quitté ?
 

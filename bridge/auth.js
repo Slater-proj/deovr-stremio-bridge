@@ -9,7 +9,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const needLoginError = () => Object.assign(new Error('Connexion Stremio requise : ouvrez la page /setup du pont dans un navigateur sur ce PC'), { code: 'NEED_LOGIN' });
 
-module.exports = function createAuth({ cfg, log, post, dataDir, onChange = () => {} }) {
+module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onChange = () => {} }) {
   let session = null;   // { authKey, emailHint, source: 'config' | 'store' | 'session', scheme }
   let storeError = '';
   const token = crypto.randomBytes(24).toString('hex'), fails = [];
@@ -25,7 +25,7 @@ module.exports = function createAuth({ cfg, log, post, dataDir, onChange = () =>
     catch (e) { storeError = e.message; log('warn', `clé Stremio non enregistrée (${e.message}) : elle reste en mémoire jusqu'à l'arrêt du pont`); return false; }
   }
   function stripLegacyPassword() {   // retire le mot de passe de config.json une fois la clé enregistrée
-    const f = path.join(dataDir, 'config.json');
+    const f = configFile || path.join(dataDir, 'config.json');
     try {
       const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (!('password' in j) || !j.password) return false;
       delete j.password; fs.writeFileSync(f, JSON.stringify(j, null, 2)); return true;

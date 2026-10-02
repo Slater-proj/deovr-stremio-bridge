@@ -10,7 +10,7 @@ const ff = (() => { try { const r = cp.spawnSync(L.cfg.ffmpeg, ['-version'], { t
 let live = '(pont non démarré : lance start.bat avant RAPPORT.bat pour inclure l\'état en direct)';
 try {
   const g = async p => (await fetch(`http://127.0.0.1:${L.cfg.port}${p}`, { signal: AbortSignal.timeout(4000) })).text();
-  live = ['--- /debug/downloads (onglet « En cours » : état + chronologie complète de chaque film cliqué, bilans) ---', await g('/debug/downloads'), '--- /debug/perf (dont ouvertures de test deovr:// réussies, demandes de la racine par DeoVR) ---', await g('/debug/perf'), '--- /debug/health (seeders annoncés par film) ---', await g('/debug/health'), '--- /status.json ---', await g('/status.json'), '--- /debug/live (écrans de chargement) ---', await g('/debug/live')].join('\n');
+  live = ['--- /debug/downloads (onglet « En cours » : état + chronologie complète de chaque film cliqué, bilans) ---', await g('/debug/downloads'), '--- /debug/labo (banc de test casque : ce que le lecteur a demandé pour chaque scène de test) ---', await g('/debug/labo'), '--- /debug/perf (dont ouvertures de test deovr:// réussies, demandes de la racine par DeoVR) ---', await g('/debug/perf'), '--- /debug/health (seeders annoncés par film) ---', await g('/debug/health'), '--- /status.json ---', await g('/status.json'), '--- /debug/live (écrans de chargement) ---', await g('/debug/live')].join('\n');
 } catch {}
 let txt = [
   `RAPPORT DE SUPPORT — ${new Date().toISOString()}`,

@@ -35,3 +35,13 @@ test('la version du pont = celle de package.json', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
   assert.equal(pkg.version, L.VERSION.split('.').length === 2 ? L.VERSION + '.0' : L.VERSION);
 });
+
+test('config.json créé au premier lancement : clés connues, port 4477, aucun identifiant', () => {
+  const S = require('../../bridge/settings'), known = Object.keys(L.cfg);
+  assert.equal(S.DEFAULTS.port, 4477);
+  for (const k of Object.keys(S.DEFAULTS)) assert.ok(k === '_aide' || known.includes(k), `réglage inconnu du pont : ${k}`);
+  for (const k of ['email', 'password', 'authKey']) assert.ok(!(k in S.DEFAULTS), k);
+  const f = path.join(require('os').tmpdir(), `settings-${process.pid}.json`); fs.rmSync(f, { force: true });
+  assert.equal(S.ensure(f), 'cree'); assert.equal(S.ensure(f), 'existe'); assert.equal(JSON.parse(fs.readFileSync(f, 'utf8')).port, 4477); fs.rmSync(f, { force: true });
+  fs.writeFileSync(f, '{"port":9}'); assert.equal(S.ensure(f), 'existe'); assert.equal(JSON.parse(fs.readFileSync(f, 'utf8')).port, 9, 'un fichier existant n\'est jamais écrasé'); fs.rmSync(f, { force: true });
+});

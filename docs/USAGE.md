@@ -2,22 +2,22 @@
 
 ## Lancer le pont
 
-Exe portable : double-clic sur `DeoVR-Stremio-Bridge.exe` (Stremio doit tourner). La console affiche version, dossier de données et adresses. Au premier lancement, le navigateur s'ouvre sur la page de connexion `/setup`. Options utiles (`--help` les liste toutes) :
+Exe portable : double-clic sur `DeoVR-Stremio-Bridge.exe` (Stremio doit tourner). Réglages (port, `bindHost`, `platform`, `vrOnly`, `localDirs`…) dans `config.json` à côté de l'exe. La console affiche version, dossier de données et adresses. Au premier lancement, le navigateur s'ouvre sur la page de connexion `/setup`. Options utiles (`--help` les liste toutes) :
 
 | Option | Effet |
 |---|---|
-| `--dev` (ou `LANCER-MODE-DEV.bat`) | mode développeur : journaux détaillés, sortie d'ffmpeg, page `http://localhost:8080/dev` qui liste tous les points de diagnostic |
+| `--dev` (ou `utility\LANCER-MODE-DEV.bat`, ou `"dev": true` dans `config.json`) | mode développeur : journaux détaillés, sortie d'ffmpeg, page `http://localhost:4477/dev` qui liste tous les points de diagnostic |
 | `--login` / `--logout` | rouvrir la page de connexion / oublier le compte |
 | `--port N`, `--data-dir DIR` | port et dossier de données |
 | `--no-browser` | ne jamais ouvrir le navigateur tout seul |
-| `--report` (ou `RAPPORT-SUPPORT.bat`) | écrit `data\rapport-support.txt` (secrets masqués) |
-| `--diagnose` (ou `DIAGNOSTIC.bat`) | diagnostic complet |
+| `--report` (ou `utility\RAPPORT-SUPPORT.bat`) | écrit `data\rapport-support.txt` (secrets masqués) |
+| `--diagnose` (ou `utility\DIAGNOSTIC.bat`) | diagnostic complet |
 
-Changer de compte Stremio : `http://localhost:8080/setup` (sur le PC) → *Changer de compte*.
+Changer de compte Stremio : `http://localhost:4477/setup` (sur le PC) → *Changer de compte*.
 
 ## Ouvrir la bibliothèque
 
-Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. `http://localhost:8080`). DeoVR demande alors `/deovr` et affiche la bibliothèque native avec ses onglets :
+Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. `http://localhost:4477`). DeoVR demande alors `/deovr` et affiche la bibliothèque native avec ses onglets :
 
 | Onglet | Contenu |
 |---|---|
@@ -33,7 +33,7 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 
 1. Ouvrez la fiche d'un film → lancez la lecture. **C'est ce clic qui démarre le téléchargement.**
 2. Un **écran de chargement** s'affiche (dans la disposition du film : côte à côte, dessus-dessous ou plat) : étape 1/4 recherche de pairs → 2/4 métadonnées → 3/4 mise en tampon → 4/4 lancement. Il indique pairs, Mo reçus, débit réel et nécessaire, tampon et temps restant. 30 à 60 s au démarrage est normal.
-3. Quand assez de film est converti, la lecture **bascule toute seule** sur le film.
+3. Quand assez de film est converti : film **H.264** → la lecture **bascule toute seule** ; film **HEVC** (la plupart des 6K/8K) → l'écran affiche « PRÊT, appuyez sur RETOUR puis relancez le film » (le lecteur de DeoVR ne sait pas enchaîner du HEVC dans cet écran) et le second clic démarre immédiatement.
 4. Si le débit est insuffisant, l'écran dit combien de minutes d'avance sont nécessaires pour lire sans coupure (ou que le film est trop lourd pour ce débit). Si aucun pair n'est trouvé, il le dit aussi : choisissez un autre film.
 5. Vous pouvez **quitter** : le téléchargement continue `holdMinutes` (30 min) puis se met en pause (la partie reçue reste dans le cache Stremio). Relancer le film reprend où il en était.
 
@@ -56,10 +56,10 @@ Les pastilles sont des seeders annoncés, pas une garantie de lecture : le tél�
 
 ## Rechercher
 
-Taper dans un casque est pénible, mais possible : dans le navigateur de DeoVR, tapez `http://localhost:8080/s/mot` (ex. `/s/avatar`). Sur le PC, la page web `http://localhost:8080/ui` offre une interface façon deovr.com (sources à gauche, recherche, grille, filtres 180°/360°/VR). `/ui` et `/t` s'ouvrent depuis le navigateur du PC ou en les tapant en entier dans DeoVR.
+Taper dans un casque est pénible, mais possible : dans le navigateur de DeoVR, tapez `http://localhost:4477/s/mot` (ex. `/s/avatar`). Sur le PC, la page web `http://localhost:4477/ui` offre une interface façon deovr.com (sources à gauche, recherche, grille, filtres 180°/360°/VR). `/ui` et `/t` s'ouvrent depuis le navigateur du PC ou en les tapant en entier dans DeoVR.
 
 ## Suivi et dépannage rapide
 
-- `http://localhost:8080/status` : films en cours, pairs, débit réel/nécessaire.
-- `http://localhost:8080/debug/downloads` : chronologie complète de chaque clic ; `data\bridge-bilans.log` : un bilan par film (« lu », « quitté puis repris », « abandonné par DeoVR après N s », « aucune donnée »).
+- `http://localhost:4477/status` : films en cours, pairs, débit réel/nécessaire.
+- `http://localhost:4477/debug/downloads` : chronologie complète de chaque clic ; `data\bridge-bilans.log` : un bilan par film (« lu », « quitté puis repris », « abandonné par DeoVR après N s », « aucune donnée »).
 - Voir [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

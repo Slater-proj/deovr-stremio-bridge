@@ -45,12 +45,18 @@ jobs:
         run: echo "BUILD_SUFFIX=-dev.${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - name: Fabriquer l'exe portable
         run: node scripts/build-exe.js --ffmpeg-dir "$env:FFMPEG_DIR"
-      - name: Test de fumée de l'exe (démarrage réel, ffmpeg embarqué, écran de chargement, rapport)
+      - name: "Test de fumée de l'exe RELEASE (zip minimal : exe + resources + docs)"
         shell: pwsh
         run: |
           $zip = Get-ChildItem dist\DeoVR-Stremio-Bridge-v*-windows-x64.zip | Select-Object -First 1
           Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\portable"
           node scripts/smoke-exe.js "$env:RUNNER_TEMP\portable\DeoVR-Stremio-Bridge"
+      - name: Test de fumée de l'exe DEBUG (même exe + utility\ + docs\DEBUG.txt)
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist\DeoVR-Stremio-Bridge-v*-windows-x64-debug.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\portable-debug"
+          node scripts/smoke-exe.js "$env:RUNNER_TEMP\portable-debug\DeoVR-Stremio-Bridge"
       - name: Journaux du test de fumée (en cas d'échec)
         if: failure()
         shell: pwsh
@@ -59,11 +65,11 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: exe-portable-windows-${{ github.run_number }}
-          path: dist/DeoVR-Stremio-Bridge-v*-windows-x64.zip
+          path: dist/DeoVR-Stremio-Bridge-v*-windows-x64*.zip
           retention-days: 14
           if-no-files-found: error
 
-  # En parallèle : variante « Node » (pour les utilisateurs avancés) fabriquée et contrôlée.
+  # En parallèle : variante « Node » (développeurs ; non publiée dans les releases) fabriquée et contrôlée.
   archive:
     name: Archive Node (variante avancée)
     runs-on: ubuntu-latest
@@ -104,8 +110,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Build Node (suffixe de test)
-        run: BUILD_SUFFIX="-dev.${{ github.run_number }}.${GITHUB_SHA::7}" npm run build
       - name: Récupérer l'exe portable fabriqué et testé par le job Windows
         run: gh run download "$GITHUB_RUN_ID" -n "exe-portable-windows-${{ github.run_number }}" -D dist
       - name: Publier la pré-release
@@ -115,8 +119,8 @@ jobs:
           {
             echo "**Build de test automatique** du dernier commit de \`main\` (${GITHUB_SHA::7}). Tests verts et exe vérifié par un test de fumée sous Windows, mais **non validé sur un vrai casque**."
             echo
-            echo "- **\`DeoVR-Stremio-Bridge-…-windows-x64.zip\`** : version portable, sans installation (Node et ffmpeg inclus). C'est celle à utiliser."
-            echo "- \`deovr-stremio-bridge-…zip\` : variante pour utilisateurs avancés (Node.js à installer)."
+            echo "- **\`DeoVR-Stremio-Bridge-…-windows-x64-debug.zip\`** : pour les essais. Contient l'exe, \`resources\\\`, \`docs\\\` et le dossier \`utility\\\` (mode développeur, rapport d'assistance, diagnostic…)."
+            echo "- \`DeoVR-Stremio-Bridge-…-windows-x64.zip\` : le même exe, package minimal tel qu'il sera publié (exe + resources + docs)."
             echo
             echo "Dernier changement : ${COMMIT_MSG%%$'\n'*}"
             echo
