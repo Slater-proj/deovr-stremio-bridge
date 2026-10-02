@@ -51,10 +51,31 @@ test('les fiches ne démarrent AUCUN téléchargement (le clic seul le fait)', a
   assert.ok(!mocks.history.some(h => /^(POST|GET) \/\w{40}\/(create|\d)/.test(h)), mocks.history.join('\n'));
 });
 
-test('film d\'un catalogue « VR » : déclaré VR (jamais plat) même sans indice dans le titre', async () => {
+test('film d\'un catalogue « VR » sans format dans le titre : fiche SANS format déclaré (le menu FLAT/180/360 de DeoVR reste disponible), format retenu visible dans /debug/video', async () => {
   const lib = await library(), item = scene(lib, 'Top VR').list.find(i => /Zoe/.test(i.title));
   const v = await bridge.json(new URL(item.video_url).pathname);
-  assert.equal(v.screenType, 'dome'); assert.equal(v.stereoMode, 'sbs'); assert.equal(v.is3d, true);
+  assert.equal(v.screenType, undefined); assert.equal(v.stereoMode, undefined); assert.equal(v.is3d, undefined);
+  const id = decodeURIComponent(new URL(item.video_url).pathname.split('/').pop().replace(/\.json$/, '')), type = new URL(item.video_url).pathname.split('/')[2];
+  const d = await bridge.json(`/debug/video/${type}/${encodeURIComponent(id)}`); assert.equal(d.chosen.screenType, 'dome'); assert.equal(d.chosen.stereoMode, 'sbs');
+});
+
+test('disque presque plein : avertissement en tête de « En cours », état dans /debug/perf, aucun téléchargement', async () => {
+  const b = await startBridge(mocks, { minFreeCriticalGB: 99999999 });   // seuil absurde : le disque de test est « presque plein »
+  try {
+    await b.waitFor(async () => (await b.json('/debug/perf')).disque.critique === true, 15000);
+    const lib = await b.json('/deovr'); assert.match(scene(lib, 'En cours').list[0].title, /Disque presque plein/);
+    assert.ok(/DISQUE PRESQUE PLEIN/.test(b.out()), 'journal');
+  } finally { await b.stop(); }
+});
+
+test('formatMenu "declare" : le format est toujours déclaré (jamais plat) ; "free" : jamais déclaré', async () => {
+  for (const [mode, declared] of [['declare', true], ['free', false]]) {
+    const b = await startBridge(mocks, { formatMenu: mode });
+    try {
+      const lib = await b.json('/deovr'), item = scene(lib, 'Top VR').list.find(i => /Zoe/.test(i.title)), v = await b.json(new URL(item.video_url).pathname);
+      if (declared) { assert.equal(v.screenType, 'dome'); assert.equal(v.stereoMode, 'sbs'); assert.equal(v.is3d, true); } else assert.equal(v.screenType, undefined);
+    } finally { await b.stop(); }
+  }
 });
 
 test('titre « 3D SBS » (catalogue Films 3D) : plat 3D côte à côte', async () => {

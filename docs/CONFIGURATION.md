@@ -50,6 +50,9 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `testScene` | `true` | onglet « Test » avec de petites vidéos embarquées |
 | `extraTrackers` | `[]` | trackers ajoutés à TOUS les torrents (en plus de ceux de l'addon et des trackers publics) |
 | `holdMinutes` | `30` | un film lancé reste actif (téléchargement continu) ce temps après la dernière activité du lecteur |
+| `formatMenu` | `['auto', 'declare', 'free'].includes(file.formatMenu) ? file.formatMenu : 'auto'` | mesuré au casque : dès que la fiche déclare screenType/stereoMode, DeoVR cache son sélecteur de mode (FLAT/180/360/fisheye). "declare" = toujours déclarer (image juste d'emblée, pas de menu) ; "free" = ne jamais déclarer (menu présent, image côte à côte brute jusqu'à votre choix, DeoVR le retient par film) ; "auto" = déclarer seulement si le titre/flux dit le format |
+| `loaderTextScale` | `+file.loaderTextScale > 0 ? +file.loaderTextScale : 1` | taille du texte de l'écran de chargement en VR (1 = défaut ; 0.7 plus petit, 1.3 plus grand) |
+| `minFreeCriticalGB` | `3` | disque : sous ce seuil les téléchargements sont arrêtés et les nouveaux clics refusés avec un message (Stremio plante sinon) |
 | `coursSlots` | `6` | onglet « En cours » : nombre d'emplacements fixes (DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste) |
 | `maxDownloads` | `3` | films téléchargés en même temps (le plus ancien est mis en pause au-delà) |
 | `minBufferSec` | `20` | tampon minimum (secondes de film converties) avant de passer de l'écran de chargement au film |

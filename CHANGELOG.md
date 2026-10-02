@@ -4,6 +4,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Corrigé (3e test au casque du 02/10 : résultats des Labos)
+Mesures : Labo 3 (HEVC en HLS fMP4) **passe** ; Labo 9 (HEVC en MKV direct) **passe** ; Labo 4 passe ; Labos 2 (HEVC en HLS TS) et 5 (bascule H.264 TS → HEVC fMP4) échouent ; Labo 8 : le nom `_180_LR` n'est pas reconnu ; les fiches qui **déclarent** le format (Labos 1, 3, 4, 5, 9) n'ont **pas** le sélecteur FLAT/180/360/fisheye, celles qui ne le déclarent pas (Labos 7, 8) l'ont.
+- **Sélecteur de mode de DeoVR** : nouveau réglage `formatMenu` (`auto` par défaut) : le format n'est déclaré dans la fiche que s'il est lu dans le titre/flux ; sinon la fiche ne déclare rien → le menu de DeoVR est présent (image côte à côte brute, DeoVR retient votre choix par film). `declare` = toujours déclaré (image juste d'emblée, pas de menu), `free` = jamais déclaré. Les journaux de décisions indiquent « déclaré » ou « NON déclaré ».
+- **Texte de l'écran de chargement deux fois plus petit en VR** (lignes de 34 caractères, ≈ 15 % de la largeur d'un œil) et réglable : `loaderTextScale` (0.7 plus petit, 1.3 plus grand). Même taille pour les Labos.
+- **Repli « fiche demandée comme flux »** : la redirection 302 échouait (le lecteur résout les segments relatifs par rapport à l'adresse de la fiche → 404 en boucle). La playlist est maintenant servie directement à l'adresse de la fiche, avec des adresses de segments absolues ; un fichier direct reste redirigé.
+- **Disque presque plein** (le disque a atteint 0 Go libre : Stremio ne répondait plus, DeoVR a planté) : surveillance toutes les 20 s du disque du cache Stremio et du dossier temporaire ; sous `minFreeCriticalGB` (3 Go) les téléchargements sont arrêtés, les nouveaux films refusés avec le message « DISQUE PLEIN » sur l'écran de chargement et en tête de « En cours ». Avant, la protection ne jouait que pendant la lecture d'un film.
+- **Films HEVC en MKV** : lecture directe du MKV après « relancez » (Labo 9 : passe). Avant, ils partaient dans un flux HLS TS HEVC, qui échoue. Le codec audio est relevé : DTS/TrueHD/Opus/Vorbis → avertissement (peut être muet en lecture directe).
+- **Banc de test** : Labo 7 pointait vers un fichier inexistant (corrigé) ; plusieurs demandes en rafale (< 2 s) sur un même fichier = une seule ouverture (le Labo 9 était un faux « ÉCHEC ») ; Labos 10 et 11 (déclaration partielle du format) et 12 (bascule HEVC fMP4 → HEVC fMP4).
+
 ### Corrigé (2e test au casque du 02/10)
 - **Écran de chargement et Labos lisibles en VR** : le texte tenait sur tout le dôme 180° (lignes de 64 caractères) donc « étiré » et trop grand. Désormais lignes de 30 caractères maximum, bloc centré (≈ 35 % de la largeur d'un œil), barre plus courte ; les écrans plats gardent la mise en page large.
 - **Faux avertissement « le lecteur recommence le flux »** : la première demande du segment 0 du film est la bascule normale (elle comptait comme un redémarrage). Seules les demandes suivantes comptent ; le bilan n'écrit plus « MAIS redémarré » à tort.

@@ -11,6 +11,8 @@ const DEFAULTS = {
   localDirs: [],                                // dossiers de vidéos locales, ex. ["D:\\VR"] (onglet « Mes vidéos »)
   localStremio: 'http://127.0.0.1:11470',       // serveur de streaming de l'application Stremio
   maxDownloads: 3,                              // films téléchargés en même temps
+  formatMenu: 'auto',                           // "auto" : format déclaré seulement s'il est lu dans le titre (sinon le menu FLAT/180/360 de DeoVR reste disponible) ; "declare" : toujours déclaré (pas de menu) ; "free" : jamais déclaré (menu toujours là)
+  loaderTextScale: 1,                           // taille du texte de l'écran de chargement en VR (0.7 = plus petit, 1.3 = plus grand)
   holdMinutes: 30,                              // un film quitté reste actif (téléchargement) ce nombre de minutes
   dev: false,                                   // true = mode développeur (journaux détaillés) à chaque lancement
 };

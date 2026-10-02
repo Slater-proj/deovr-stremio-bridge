@@ -37,7 +37,9 @@ describe('lecture : clic -> écran de chargement -> film', { skip: !HAS_FFMPEG &
   test('repli : si le LECTEUR (NSPlayer) réclame la fiche comme flux, il est redirigé vers le flux ; un navigateur reçoit la fiche', async () => {
     const lib = await bridge.json('/deovr'), path1 = new URL(lib.scenes[0].list[0].video_url).pathname;
     const r = await bridge.get(path1, { redirect: 'manual', headers: { 'user-agent': 'NSPlayer/12.00.26100.9549 WMFSDK/12.00.26100.9549', range: 'bytes=0-' } });
-    assert.equal(r.status, 302); assert.match(r.headers.get('location'), /\/live\/\w{40}\/0\/index\.m3u8$/);
+    assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /mpegurl/);   // playlist servie à l'adresse de la fiche (une redirection ne suffit pas : segments relatifs)
+    const pl = await r.text(); assert.match(pl, /^#EXTM3U/); const segs = pl.split('\n').filter(l => l && !l.startsWith('#'));
+    assert.ok(segs.length >= 1 && segs.every(l => /^http:\/\/127\.0\.0\.1:\d+\/live\/\w{40}\/0\/(w\d+_\d+|real\/seg\d+)\.ts$/.test(l)), 'adresses de segments absolues : ' + segs.join(','));
     const b = await bridge.get(path1, { headers: { 'user-agent': 'Mozilla/5.0 Chromium/40 HMD/0' } }); assert.equal(b.status, 200); assert.ok((await b.json()).encodings);
   });
 

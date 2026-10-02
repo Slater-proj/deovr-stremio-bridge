@@ -15,7 +15,8 @@ test('banc de test : chaque scène a une fiche JSON valide ; « path » et « sa
   const { lab } = mk(), ids = new Set();
   for (const k of Object.keys(SCENES)) {
     const v = lab.video(k, 'http://h:1'); assert.ok(v, k); ids.add(v.id);
-    if (SCENES[k].noFormat) { assert.equal(v.screenType, undefined, k); assert.equal(v.stereoMode, undefined, k); assert.equal(v.is3d, undefined, k); }
+    if (SCENES[k].partial) { for (const f of ['screenType', 'stereoMode', 'is3d']) assert.equal(v[f], SCENES[k].partial[f], k + ' ' + f); }
+    else if (SCENES[k].noFormat) { assert.equal(v.screenType, undefined, k); assert.equal(v.stereoMode, undefined, k); assert.equal(v.is3d, undefined, k); }
     else { assert.equal(v.screenType, 'dome'); assert.equal(v.stereoMode, 'sbs'); assert.equal(v.is3d, true); }
     if (SCENES[k].usePath) { assert.match(v.path, /\/lab\/h264-path\/index\.m3u8$/); assert.equal(v.encodings, undefined); }
     else assert.match(v.encodings[0].videoSources[0].url, new RegExp(`/lab/${k}/(index\\.m3u8|video\\.mp4|video\\.mkv|video_180_LR\\.mp4)$`));
@@ -32,8 +33,9 @@ test('banc de test : un lecteur qui redemande le 1er segment en moins de 30 s = 
   assert.match(lab.data().scenes['h264-ts'].verdict, /pas encore ouvert/);
   for (const f of ['index.m3u8', 'seg000.ts', 'seg005.ts']) await lab.handle(req(), res(), 'h264-ts', f);
   assert.match(lab.data().scenes['h264-ts'].verdict, /OK probable/);
-  for (const f of ['seg000.ts', 'seg000.ts']) await lab.handle(req(), res(), 'hevc-ts', f);
-  const v = lab.data().scenes['hevc-ts'].verdict; assert.match(v, /ÉCHEC probable/); assert.match(v, /1 fois/);
+  { const realNow0 = Date.now; let t0 = realNow0(); Date.now = () => t0;
+    try { await lab.handle(req(), res(), 'hevc-ts', 'seg000.ts'); t0 += 15000; await lab.handle(req(), res(), 'hevc-ts', 'seg000.ts'); } finally { Date.now = realNow0; } }   // le lecteur recommence à +15 s (mesuré)
+  const v = lab.data().scenes['hevc-ts'].verdict; assert.match(v, /ÉCHEC probable/); assert.match(v, /1 fois/); assert.match(v, /15/);
   assert.ok(logs.some(([l, m]) => l === 'warn' && /RECOMMENCE/.test(m)), 'avertissement dans le journal');
   await lab.handle(req('HEAD'), res(), 'hevc-ts', 'seg000.ts'); assert.equal(lab.data().scenes['hevc-ts'].ouvertures.length, 2, 'HEAD ne compte pas');
   assert.ok(served.length >= 5);
@@ -42,6 +44,18 @@ test('banc de test : un lecteur qui redemande le 1er segment en moins de 30 s = 
   Date.now = () => t;
   try { t += 100000; await lab.handle(req(), res(), 'h264-ts', 'seg000.ts'); t += 100000; await lab.handle(req(), res(), 'h264-ts', 'seg000.ts'); await lab.handle(req(), res(), 'h264-ts', 'seg005.ts'); } finally { Date.now = realNow; }
   const w = lab.data().scenes['h264-ts'].verdict; assert.match(w, /OK probable/); assert.match(w, /nouveaux essais/); assert.doesNotMatch(w, /ÉCHEC/);
+});
+
+test('banc de test : un MKV lu par plusieurs demandes en rafale (sondes) n\'est pas un redémarrage', async () => {
+  const { dir, lab } = mk(); fs.mkdirSync(path.join(dir, 'lab', 'hevc-mkv'), { recursive: true }); fs.writeFileSync(path.join(dir, 'lab', 'hevc-mkv', 'video.mkv'), 'x');
+  for (let i = 0; i < 3; i++) await lab.handle(req(), res(), 'hevc-mkv', 'video.mkv');
+  const v = lab.data().scenes['hevc-mkv'].verdict; assert.doesNotMatch(v, /ÉCHEC/); assert.equal(lab.data().scenes['hevc-mkv'].ouvertures.length, 1);
+});
+
+test('banc de test : les scènes qui réutilisent un fichier (Labos 7, 8, 10, 11) pointent vers LE bon fichier', () => {
+  const { lab } = mk();
+  for (const k of ['hevc-nofmt', 'fmt-stereo', 'fmt-screen']) assert.match(lab.video(k, 'http://h:1').encodings[0].videoSources[0].url, new RegExp(`/lab/${k}/video\\.mp4$`), k);
+  assert.match(lab.video('hevc-name', 'http://h:1').encodings[0].videoSources[0].url, /\/lab\/hevc-name\/video_180_LR\.mp4$/);
 });
 
 test('banc de test : le même MP4 est servi sous le nom video_180_LR.mp4 (Labo 8) et compté sur la scène 8', async () => {

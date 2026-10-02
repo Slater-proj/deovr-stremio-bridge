@@ -10,16 +10,19 @@ const DUR = 24, SEG = 4, EYE = 1920;   // 24 s, segments de 4 s, 3840×1920 côt
 const SCENES = {
   'h264-ts':     { n: 1, title: 'Labo 1 · H.264 en HLS (TS) 3840×1920 — RÉFÉRENCE', what: 'H.264 dans un flux HLS (TS)', hint: 'Référence : doit passer.', first: 'seg000.ts', last: 'seg005.ts' },
   'hevc-ts':     { n: 2, title: 'Labo 2 · HEVC en HLS (TS) 3840×1920', what: 'HEVC dans un flux HLS (TS)', hint: 'Mesuré le 02/10 : relancé par le lecteur 15 s après le début.', first: 'seg000.ts', last: 'seg005.ts', hevc: true },
-  'hevc-fmp4':   { n: 3, title: 'Labo 3 · HEVC en HLS (fMP4) 3840×1920', what: 'HEVC dans un flux HLS (fMP4)', hint: 'Piste pour enchaîner un film HEVC (invalide au 02/10 : init.mp4 introuvable).', first: 'init.mp4', last: 'seg005.m4s', hevc: true },
+  'hevc-fmp4':   { n: 3, title: 'Labo 3 · HEVC en HLS (fMP4) 3840×1920', what: 'HEVC dans un flux HLS (fMP4)', hint: 'Mesuré (2e test du 02/10) : passe. Un film HEVC peut donc être lu en HLS fMP4.', first: 'init.mp4', last: 'seg005.m4s', hevc: true },
   'hevc-mp4':    { n: 4, title: 'Labo 4 · HEVC en MP4 direct 3840×1920', what: 'HEVC dans un MP4 lu directement', hint: 'Référence : lecture directe. Mesuré le 02/10 : passe.', first: 'video.mp4', last: 'video.mp4', hevc: true, file: 'video.mp4' },
-  'loader-fmp4': { n: 5, title: 'Labo 5 · chargement H.264 puis film HEVC (fMP4) dans le même flux', what: 'chargement H.264 (12 s) puis film HEVC fMP4 (12 s)', hint: 'Bascule HEVC sans quitter le lecteur ? (invalide au 02/10 : b_init.mp4 introuvable)', first: 'a_000.ts', last: 'b_002.m4s', hevc: true, combo: true },
-  'h264-path':   { n: 6, title: 'Labo 6 · repli : la fiche demandée comme si c\'était le film', what: 'fiche décrite par « path » (forme que DeoVR lit mal)', hint: 'Le lecteur réclame la fiche JSON comme flux : le pont le redirige vers le vrai flux. Passe-t-il ?', first: 'seg000.ts', last: 'seg005.ts', same: 'h264-ts', usePath: true },
-  'hevc-nofmt':  { n: 7, title: 'Labo 7 · HEVC direct, fiche SANS format déclaré', what: 'même MP4 que le Labo 4, mais la fiche ne dit ni 180° ni 3D', hint: 'DeoVR propose-t-il alors son sélecteur de mode (FLAT/180/360...) ? Que choisit-il tout seul ?', first: 'video.mp4', last: 'video.mp4', same: 'hevc-mp4', noFormat: true },
-  'hevc-name':   { n: 8, title: 'Labo 8 · HEVC direct, format dans le NOM du fichier', what: 'fiche sans format, fichier nommé video_180_LR.mp4', hint: 'DeoVR reconnaît-il le format d\'après le nom (_180_LR) ?', first: 'video_180_LR.mp4', last: 'video_180_LR.mp4', same: 'hevc-mp4', noFormat: true, alias: 'video_180_LR.mp4' },
-  'hevc-mkv':    { n: 9, title: 'Labo 9 · HEVC en MKV direct 3840×1920', what: 'HEVC dans un MKV lu directement (comme la plupart des films torrent)', hint: 'Si ça passe : plus besoin de convertir les MKV HEVC.', first: 'video.mkv', last: 'video.mkv', hevc: true, file: 'video.mkv' },
+  'loader-fmp4': { n: 5, title: 'Labo 5 · chargement H.264 puis film HEVC (fMP4) dans le même flux', what: 'chargement H.264 (12 s) puis film HEVC fMP4 (12 s)', hint: 'Mesuré (2e test du 02/10) : le lecteur se fige à la bascule H.264 TS -> HEVC fMP4.', first: 'a_000.ts', last: 'b_002.m4s', hevc: true, combo: true },
+  'h264-path':   { n: 6, title: 'Labo 6 · repli : la fiche demandée comme si c\'était le film', what: 'fiche décrite par « path » (forme que DeoVR lit mal)', hint: 'Le lecteur réclame la fiche JSON comme flux : le pont lui sert la playlist (segments en adresses absolues). Une simple redirection 302 a échoué (2e test).', first: 'seg000.ts', last: 'seg005.ts', same: 'h264-ts', usePath: true },
+  'hevc-nofmt':  { n: 7, title: 'Labo 7 · HEVC direct, fiche SANS format déclaré', what: 'même MP4 que le Labo 4, mais la fiche ne dit ni 180° ni 3D', hint: 'Sélecteur de mode présent quand la fiche ne déclare aucun format (mesuré avec le Labo 8) ; image brute côte à côte.', first: 'video.mp4', last: 'video.mp4', same: 'hevc-mp4', noFormat: true },
+  'hevc-name':   { n: 8, title: 'Labo 8 · HEVC direct, format dans le NOM du fichier', what: 'fiche sans format, fichier nommé video_180_LR.mp4', hint: 'Mesuré : DeoVR ne reconnaît PAS le format d\'après le nom ; sélecteur de mode présent, image brute côte à côte.', first: 'video_180_LR.mp4', last: 'video_180_LR.mp4', same: 'hevc-mp4', noFormat: true, alias: 'video_180_LR.mp4' },
+  'fmt-stereo':  { n: 10, title: 'Labo 10 · HEVC direct, fiche avec stereoMode + is3d SEULEMENT', what: 'même MP4 ; la fiche déclare « sbs » et « 3D » mais pas le type d\'écran', hint: 'Le sélecteur de mode reste-t-il disponible ? L\'image est-elle en relief ?', first: 'video.mp4', last: 'video.mp4', same: 'hevc-mp4', partial: { stereoMode: 'sbs', is3d: true } },
+  'fmt-screen':  { n: 11, title: 'Labo 11 · HEVC direct, fiche avec screenType SEULEMENT', what: 'même MP4 ; la fiche déclare « dome » mais pas stereoMode ni is3d', hint: 'Le sélecteur de mode reste-t-il disponible ?', first: 'video.mp4', last: 'video.mp4', same: 'hevc-mp4', partial: { screenType: 'dome' } },
+  'loader-hevc': { n: 12, title: 'Labo 12 · chargement HEVC (fMP4) puis film HEVC (fMP4) dans le même flux', what: 'chargement HEVC fMP4 (12 s) puis film HEVC fMP4 (12 s)', hint: 'Bascule HEVC -> HEVC sans quitter le lecteur ? (le Labo 5, H.264 puis HEVC, bloquait à la bascule)', first: 'a_init.mp4', last: 'b_002.m4s', hevc: true, combo: true, aHevc: true },
+  'hevc-mkv':    { n: 9, title: 'Labo 9 · HEVC en MKV direct 3840×1920', what: 'HEVC dans un MKV lu directement (comme la plupart des films torrent)', hint: 'Mesuré (2e test du 02/10) : passe. Les films HEVC en MKV sont lus directement.', first: 'video.mkv', last: 'video.mkv', hevc: true, file: 'video.mkv' },
 };
 const TYPES = { '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t', '.m4s': 'video/iso.segment', '.mp4': 'video/mp4', '.mkv': 'video/x-matroska' };
-const wrap = (t, n = 28) => { const out = []; for (const raw of String(t).split('\n')) { let l = ''; for (const w of raw.split(/\s+/)) { if ((l + ' ' + w).trim().length > n) { out.push(l); l = w; } else l = (l + ' ' + w).trim(); } out.push(l); } return out; };   // lignes courtes : en VR180 tout ce qui est large est étiré sur tout le dôme
+const wrap = (t, n = 32) => { const out = []; for (const raw of String(t).split('\n')) { let l = ''; for (const w of raw.split(/\s+/)) { if ((l + ' ' + w).trim().length > n) { out.push(l); l = w; } else l = (l + ' ' + w).trim(); } out.push(l); } return out; };   // lignes courtes : en VR180 tout ce qui est large est étiré sur tout le dôme
 
 function create({ cfg, log, serveLocal, font, escF, ffmpegOk, hevcOk, thumb, runner }) {   // runner : remplace ffmpeg (tests)
   const root = path.join(cfg.tempDir, 'lab'), stats = {}, gen = {}; let started = false;
@@ -28,7 +31,7 @@ function create({ cfg, log, serveLocal, font, escF, ffmpegOk, hevcOk, thumb, run
 
   // image d'un œil (1920×1920) : bloc de texte COURT au centre (≈ 35 % de la largeur : un dôme de 180° étire tout ce qui est large) + compteur jaune ; deux yeux identiques côte à côte
   const filter = (txtFile, eye = EYE) => {
-    let f = font ? `drawtext=fontfile='${escF(font)}':textfile='${escF(txtFile)}':expansion=none:fontcolor=white:fontsize=${Math.round(eye / 42)}:line_spacing=${Math.round(eye / 130)}:x=(w-text_w)/2:y=h*0.22,drawtext=fontfile='${escF(font)}':text='%{eif\\:trunc(t)\\:d} s':fontcolor=yellow:fontsize=${Math.round(eye / 14)}:x=(w-text_w)/2:y=h*0.66` : `null`;
+    let f = font ? `drawtext=fontfile='${escF(font)}':textfile='${escF(txtFile)}':expansion=none:fontcolor=white:fontsize=${Math.round(eye / 58 * (cfg.loaderTextScale || 1))}:line_spacing=${Math.round(eye / 170)}:x=(w-text_w)/2:y=h*0.3,drawtext=fontfile='${escF(font)}':text='%{eif\\:trunc(t)\\:d} s':fontcolor=yellow:fontsize=${Math.round(eye / 22 * (cfg.loaderTextScale || 1))}:x=(w-text_w)/2:y=h*0.62` : `null`;
     return `[0:v]${f},drawbox=x=0:y=0:w=iw:h=ih/60:color=0x33cc77:t=fill,split[a][b];[a][b]hstack[v]`;
   };
   const src = (secs, txtFile) => ['-f', 'lavfi', '-i', `color=c=0x1a2a3a:s=${EYE}x${EYE}:r=15:d=${secs}`, '-f', 'lavfi', '-i', `sine=f=330:r=48000:d=${secs}`, '-filter_complex', filter(txtFile) + `;[1:a]volume=0.05[au]`, '-map', '[v]', '-map', '[au]'];
@@ -51,12 +54,12 @@ function create({ cfg, log, serveLocal, font, escF, ffmpegOk, hevcOk, thumb, run
       const ta = path.join(d, 'texte-a.txt'), tb = path.join(d, 'texte-b.txt');
       fs.writeFileSync(ta, wrap(['LABO 5 — CHARGEMENT (H.264)', '', 'Dans 12 s le FILM (HEVC, fMP4) doit prendre le relais sans que le lecteur redémarre.', '', 'Notez ce qui se passe à la bascule.'].join('\n')).join('\n'), 'utf8');
       fs.writeFileSync(tb, wrap(['LABO 5 — FILM (HEVC, fMP4)', '', 'Si vous lisez ceci : la bascule chargement vers film HEVC FONCTIONNE dans un seul flux.', '', 'Notez : image devant vous ? texte net ?'].join('\n')).join('\n'), 'utf8');
-      err = await hls(d, 'a_', false, false, 12, ta) || await hls(d, 'b_', true, true, 12, tb);
-      if (!err && (err = need(d, ['a_.m3u8', 'b_.m3u8', 'b_init.mp4', 'b_000.m4s']))) err = 'fichiers absents après ffmpeg : ' + err;
+      err = await hls(d, 'a_', !!s.aHevc, !!s.aHevc, 12, ta) || await hls(d, 'b_', true, true, 12, tb);
+      if (!err && (err = need(d, ['a_.m3u8', 'b_.m3u8', 'b_init.mp4', 'b_000.m4s', ...(s.aHevc ? ['a_init.mp4'] : [])]))) err = 'fichiers absents après ffmpeg : ' + err;
       if (!err) {
         const segs = f => fs.readFileSync(path.join(d, f), 'utf8').split('\n').filter(l => /^[a-z]_\d+\.(ts|m4s)$/.test(l.trim())).map(l => l.trim());
         const A = segs('a_.m3u8'), B = segs('b_.m3u8');
-        fs.writeFileSync(path.join(d, 'index.m3u8'), ['#EXTM3U', '#EXT-X-VERSION:7', `#EXT-X-TARGETDURATION:${SEG}`, '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-PLAYLIST-TYPE:VOD', ...A.flatMap(x => [`#EXTINF:${SEG}.000,`, x]), '#EXT-X-DISCONTINUITY', '#EXT-X-MAP:URI="b_init.mp4"', ...B.flatMap(x => [`#EXTINF:${SEG}.000,`, x]), '#EXT-X-ENDLIST', ''].join('\n'));
+        fs.writeFileSync(path.join(d, 'index.m3u8'), ['#EXTM3U', '#EXT-X-VERSION:7', `#EXT-X-TARGETDURATION:${SEG}`, '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-PLAYLIST-TYPE:VOD', ...(s.aHevc ? ['#EXT-X-MAP:URI="a_init.mp4"'] : []), ...A.flatMap(x => [`#EXTINF:${SEG}.000,`, x]), '#EXT-X-DISCONTINUITY', '#EXT-X-MAP:URI="b_init.mp4"', ...B.flatMap(x => [`#EXTINF:${SEG}.000,`, x]), '#EXT-X-ENDLIST', ''].join('\n'));
       }
     } else {
       err = await hls(d, 'seg', !!s.hevc, k === 'hevc-fmp4', DUR, txt);
@@ -79,11 +82,11 @@ function create({ cfg, log, serveLocal, font, escF, ffmpegOk, hevcOk, thumb, run
   }
 
   const items = base => [{ title: 'Mode d\'emploi · menu latéral et recherche (où les trouver)', videoLength: 10, thumbnailUrl: thumb(base), video_url: `${base}/video/lab/guide.json` },
-    ...Object.entries(SCENES).map(([k, s]) => ({ title: s.title, videoLength: DUR, thumbnailUrl: thumb(base), video_url: `${base}/video/lab/${k}.json` }))];
+    ...Object.entries(SCENES).sort((x, y) => x[1].n - y[1].n).map(([k, s]) => ({ title: s.title, videoLength: DUR, thumbnailUrl: thumb(base), video_url: `${base}/video/lab/${k}.json` }))];
   function video(k, base) {
     if (k === 'guide') return { id: 9099, title: 'Mode d\'emploi · menu latéral et recherche', videoLength: 10, thumbnailUrl: thumb(base), screenType: 'flat', stereoMode: 'off', is3d: false, encodings: [{ name: 'h264', videoSources: [{ resolution: 1080, url: `${base}/lab/guide/video.mp4` }] }] };
     const s = SCENES[k]; if (!s) return null;
-    const url = `${base}/lab/${k}/${s.alias || s.file || 'index.m3u8'}`, common = { id: 9100 + s.n, title: s.title, videoLength: DUR, thumbnailUrl: thumb(base), ...(s.noFormat ? {} : { screenType: 'dome', stereoMode: 'sbs', is3d: true }) };
+    const url = `${base}/lab/${k}/${s.alias || s.file || (s.same && SCENES[s.same].file) || 'index.m3u8'}`, common = { id: 9100 + s.n, title: s.title, videoLength: DUR, thumbnailUrl: thumb(base), ...(s.partial ? s.partial : s.noFormat ? {} : { screenType: 'dome', stereoMode: 'sbs', is3d: true }) };
     return s.usePath ? { ...common, path: url } : { ...common, encodings: [{ name: 'h264', videoSources: [{ resolution: 1920, url }] }] };
   }
   const st = k => stats[k] || (stats[k] = { ouvertures: [], requetes: 0, fichiers: {}, fin: false });
@@ -98,7 +101,8 @@ function create({ cfg, log, serveLocal, font, escF, ffmpegOk, hevcOk, thumb, run
     if (req.method === 'GET') {
       const a = st(k); a.requetes++; a.fichiers[file] = (a.fichiers[file] || 0) + 1;
       const now = Date.now();
-      if (file === s.first) {
+      if (file === s.first && a.ouvertures.length && now - a.ouvertures[a.ouvertures.length - 1] < 2000) a.sondes = (a.sondes || 0) + 1;   // lecture d'un MKV/MP4 : plusieurs demandes en rafale = une seule ouverture
+      else if (file === s.first) {
         a.ouvertures.push(now); const n = a.ouvertures.length;
         if (n === 1) log('info', `[banc de test] ${s.title} : le lecteur ouvre le flux`);
         else { const dt = ((now - a.ouvertures[n - 2]) / 1000).toFixed(1); log(dt <= 30 ? 'warn' : 'info', `[banc de test] ${s.title} : le lecteur ${dt <= 30 ? 'RECOMMENCE le flux (ouverture n°' + n + ', ' + dt + ' s après la précédente) -> il n\'arrive pas à le démarrer' : 'rouvre le flux (nouvel essai, ' + dt + ' s après la précédente)'}`); }
