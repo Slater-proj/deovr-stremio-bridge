@@ -82,7 +82,7 @@ Stremio has no OAuth, so the only way to get a session is e-mail + password. The
 
 | Covered by automated tests (CI, with mocks) | Still needs a real headset to be confirmed |
 |---|---|
-| library tabs and order, VR declaration, badges, search, 16:9 thumbnails | DeoVR accepting the loading-screen → film HLS switch (*Test 5 / 6* in the "Test pont" tab) |
+| library tabs and order, VR declaration, badges, search, 16:9 thumbnails | H.264 loading-screen → film HLS switch is confirmed on a headset; HEVC films need "back, then relaunch" (HEVC inside HLS-TS fails; direct MP4/MKV HEVC works) — more headset checks in the *Labo 1–12* tab |
 | click ⇒ download, loading screen ⇒ film, "En cours" tab | `deovr://` links opened from DeoVR's browser (page `/t`) |
 | ffmpeg crash recovery, disk trimming, cache budget, Stremio-down message | real field names of Stremio's `/settings` and `stats.json` on every Stremio version |
 | films with 0 seeders never produce a fake film | accents and `·` rendering in DeoVR titles |

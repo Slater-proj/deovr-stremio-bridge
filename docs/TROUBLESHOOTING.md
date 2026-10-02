@@ -12,8 +12,11 @@ Commencez par `utility\DIAGNOSTIC.bat` (zip debug ; ou `DeoVR-Stremio-Bridge.exe
 | L'écran de chargement reste au-delà de 90 s sans donnée | aucune source vivante | choisir un film avec plus de seeders (`Plus de seeds`) ; l'écran le dit lui-même |
 | « Débit insuffisant… » | le torrent est plus lent que le film | laisser charger (le téléchargement continue si vous quittez), ou choisir un autre film |
 | L'écran de chargement dit « PRÊT, appuyez sur RETOUR puis relancez le film » | film HEVC : le lecteur de DeoVR ne le lit pas dans un flux HLS | normal : Retour, puis relancer le film (lecture directe immédiate) |
-| La vidéo ne démarre pas seule après l'écran de chargement | DeoVR refuse la bascule HLS | essayer les tests 5 et 6 et le banc de test (Labo 1 à 6, `/debug/labo`) ; si KO : `"loadingScreen": "off"` dans `config.json`, et envoyer le rapport |
+| La vidéo ne démarre pas seule après l'écran de chargement | DeoVR refuse la bascule HLS | essayer les tests 5 et 6 et le banc de test (Labo 1 à 12, `/debug/labo`) ; si KO : `"loadingScreen": "off"` dans `config.json`, et envoyer le rapport |
 | Le lecteur tourne sans fin / « recommence » à 15 s | flux que le décodeur du lecteur ne démarre pas (HEVC dans du HLS) | voir le bilan du film (`ouvertures_du_flux_a_s`) et `/debug/labo` ; ne pas forcer `hevcDirect: false` |
+| Pas de choix FLAT / 180 / 360 / fisheye dans le lecteur | la fiche déclare le format : DeoVR cache alors son sélecteur (mesuré) | `"formatMenu": "free"` dans `config.json` (menu toujours là, image côte à côte brute jusqu'à votre choix, retenu par film) ; `"auto"` (défaut) ne déclare que si le titre dit le format |
+| « DISQUE PLEIN » sur l'écran de chargement ou dans *En cours* | moins de 3 Go libres (`minFreeCriticalGB`) sur le disque du cache Stremio ou du dossier temporaire | libérer de la place, vider le cache de Stremio ; les téléchargements reprennent au clic suivant |
+| Texte de l'écran de chargement trop grand ou trop petit en VR | taille par défaut | `"loaderTextScale"` dans `config.json` (0.7 plus petit, 1.3 plus grand) |
 | La liste ne se met pas à jour dans DeoVR | DeoVR garde la bibliothèque en mémoire | revenir à la page des sites puis rouvrir le pont |
 | Pas de menu latéral ni de barre de recherche | la liste native de DeoVR n'en a pas | navigateur de DeoVR : `http://localhost:4477/ui` ou `/s/mot` (fiche « Mode d'emploi » dans l'onglet Test pont) |
 | Lecture qui saccade | débit < débit nécessaire | voir le message de l'écran de chargement ; film plus léger ; cache Stremio ; disque lent |
