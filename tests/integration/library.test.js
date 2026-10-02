@@ -120,4 +120,12 @@ test('sécurité : pas de config.json ni de mot de passe dans les pages de diagn
     assert.ok(!/password|authKey/i.test(t), p);
   }
   assert.equal((await bridge.get('/config.json')).status, 404);
+  for (const p of ['/debug', '/status.json', '/debug/requests', '/deovr']) assert.equal((await bridge.get(p)).headers.get('access-control-allow-origin'), null, `${p} : lisible par n'importe quelle page web (CORS)`);
+});
+
+test('sécurité : un nom de domaine extérieur dans l\'en-tête Host est refusé (DNS rebinding) ; localhost et l\'IP passent', async () => {
+  const get = host => new Promise((ok, no) => require('http').get({ host: '127.0.0.1', port: bridge.port, path: '/debug', headers: { host } }, r => { r.resume(); r.on('end', () => ok(r.statusCode)); }).on('error', no));
+  assert.equal(await get(`evil.example.com:${bridge.port}`), 403);
+  assert.equal(await get(`localhost:${bridge.port}`), 200);
+  assert.equal(await get(`127.0.0.1:${bridge.port}`), 200);
 });

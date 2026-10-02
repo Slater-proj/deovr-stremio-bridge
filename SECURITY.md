@@ -16,7 +16,8 @@ Accessible **uniquement depuis le PC lui-même** (adresse source loopback), mêm
 
 - Le pont écoute par défaut sur **toutes les interfaces** (`bindHost: "0.0.0.0"`) pour que d'autres appareils du réseau local (casque autonome) puissent l'utiliser. Il n'a **pas d'authentification** : toute machine de votre réseau local peut lister votre bibliothèque et déclencher des téléchargements. Sur un PC VR seul, mettez `"bindHost": "127.0.0.1"`. N'exposez jamais le port sur Internet.
 - Les pages de diagnostic (`/debug/*`, `/status`, `/dev`) ne renvoient ni mot de passe, ni clé, ni URL d'addon en clair (masqués), mais elles montrent les titres de vos films, vos chemins et vos adresses locales.
-- Les journaux et `rapport-support.txt` masquent adresses et e-mail ; relisez-les avant de les publier. Ne publiez jamais `config.json` ni `secrets.dat`.
+- **Pages web ouvertes sur le PC** : les réponses JSON n'ont pas d'en-tête CORS (un site ne peut pas lire `/debug` ou `/status.json` depuis votre navigateur), et toute requête dont l'en-tête `Host` est un nom de domaine extérieur est refusée (403, protection contre le *DNS rebinding*). Sont acceptés : `localhost`, les adresses IP et les noms du réseau local (sans point, `.local`, `.lan`, `.home`, `.internal`, `.home.arpa`). Tests : `tests/integration/library.test.js`.
+- Les journaux masquent les URL d'addon et l'e-mail. `rapport-support.txt` masque en plus l'hôte **et le chemin** de toute URL distante (une URL d'addon peut contenir une clé dans son chemin) et le nom du compte Windows dans les chemins ; relisez-le quand même avant de le publier. Ne publiez jamais `config.json` ni `secrets.dat`.
 
 ## Exécutable et logiciels tiers
 

@@ -1,10 +1,10 @@
 <!-- Fichier généré par scripts/gen-config-doc.js : ne pas modifier à la main (modifier les commentaires de bridge/lib.js puis `npm run docs`). -->
 # Configuration (`config.json`)
 
-Copiez `config.example.json` en `config.json` (le script `INSTALL.bat` le fait pour vous) et ne gardez que les clés que vous voulez changer.
-Les valeurs par défaut conviennent à la plupart des installations. `config.json` contient vos identifiants Stremio : **ne le partagez jamais** (il est exclu du dépôt et des archives).
+`config.json` est créé au premier lancement (à côté de l'exe ; dans le dossier du code pour la variante Node) avec les réglages courants. Ajoutez-y seulement les clés que vous voulez changer, puis relancez le pont.
+Les valeurs par défaut conviennent à la plupart des installations. `config.json` ne contient **aucun identifiant** : la connexion Stremio passe par la page `/setup` (voir [SECURITY.md](../SECURITY.md)).
 
-Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STREMIO_EMAIL`, `STREMIO_PASSWORD`, `STREMIO_AUTHKEY`, `LOCAL_STREMIO`, `ADDON_URLS`, `SCRAPE_TRACKERS`, `DNS_MODE`, `DEOVR_PLATFORM`, `FFMPEG`, `LOCAL_DIRS`, `DEBUG`, `BRIDGE_DATA_DIR` (dossier des journaux/état/config).
+Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND_HOST`, `STREMIO_AUTHKEY`, `LOCAL_STREMIO`, `LOCAL_STREMIO_PUBLIC`, `ADDON_URLS`, `SCRAPE_TRACKERS`, `DNS_MODE`, `DEOVR_PLATFORM`, `FFMPEG`, `LOCAL_DIRS`, `TORRENT_START_MS`, `STREMIO_API`, `DEBUG`, `BRIDGE_DEV`, `BRIDGE_TMP` (fichiers temporaires), `BRIDGE_DATA_DIR` (dossier des journaux/état/config), `BRIDGE_CONFIG` (fichier de réglages). Anciennes : `STREMIO_EMAIL`, `STREMIO_PASSWORD`.
 
 | Clé | Valeur par défaut | Rôle |
 |---|---|---|
@@ -31,9 +31,9 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `authorized` | `'0'` | valeur du champ "authorized" (doc DeoVR : "0") |
 | `forceProxy` | `false` | faire passer TOUS les flux par le proxy du bridge |
 | `healthCheckMs` | `10000` | test de santé des torrents avant de les proposer (0 = désactivé) |
-| `torrentStartMs` | `—` | au-delà, le relais répond 504 au lieu de laisser DeoVR charger à l'infini |
-| `platform` | `—` | 'windows' (DeoVR PC : MP4/MOV/AVI, pas MKV/AV1/VP9) ou 'quest' (MKV/WebM/AV1 ok) |
-| `ffmpeg` | `—` | pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV) |
+| `torrentStartMs` | `120000` | au-delà, le relais répond 504 au lieu de laisser DeoVR charger à l'infini |
+| `platform` | `"windows"` | 'windows' (DeoVR PC : MP4/MOV/AVI, pas MKV/AV1/VP9) ou 'quest' (MKV/WebM/AV1 ok) |
+| `ffmpeg` | `ffmpeg fourni avec l'exe, sinon celui du PATH` | pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV) |
 | `remux` | `true` | autorise la conversion avec ffmpeg (MKV, écran de chargement, vignettes) ; false = lecture directe uniquement |
 | `localDirs` | `(env.LOCAL_DIRS ? env.LOCAL_DIRS.split(';').filter(Boolean) : [])` | dossiers de vidéos sur ce PC (onglet « Mes vidéos ») |
 | `showHealth` | `true` | pastille de santé dans le titre |
@@ -50,8 +50,8 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `testScene` | `true` | onglet « Test » avec de petites vidéos embarquées |
 | `extraTrackers` | `[]` | trackers ajoutés à TOUS les torrents (en plus de ceux de l'addon et des trackers publics) |
 | `holdMinutes` | `30` | un film lancé reste actif (téléchargement continu) ce temps après la dernière activité du lecteur |
-| `formatMenu` | `['auto', 'declare', 'free'].includes(file.formatMenu) ? file.formatMenu : 'auto'` | mesuré au casque : dès que la fiche déclare screenType/stereoMode, DeoVR cache son sélecteur de mode (FLAT/180/360/fisheye). "declare" = toujours déclarer (image juste d'emblée, pas de menu) ; "free" = ne jamais déclarer (menu présent, image côte à côte brute jusqu'à votre choix, DeoVR le retient par film) ; "auto" = déclarer seulement si le titre/flux dit le format |
-| `loaderTextScale` | `+file.loaderTextScale > 0 ? +file.loaderTextScale : 1` | taille du texte de l'écran de chargement en VR (1 = défaut ; 0.7 plus petit, 1.3 plus grand) |
+| `formatMenu` | `"auto"` | mesuré au casque : dès que la fiche déclare screenType/stereoMode, DeoVR cache son sélecteur de mode (FLAT/180/360/fisheye). "declare" = toujours déclarer (image juste d'emblée, pas de menu) ; "free" = ne jamais déclarer (menu présent, image côte à côte brute jusqu'à votre choix, DeoVR le retient par film) ; "auto" = déclarer seulement si le titre/flux dit le format |
+| `loaderTextScale` | `1` | taille du texte de l'écran de chargement en VR (1 = défaut ; 0.7 plus petit, 1.3 plus grand) |
 | `minFreeCriticalGB` | `3` | disque : sous ce seuil les téléchargements sont arrêtés et les nouveaux clics refusés avec un message (Stremio plante sinon) |
 | `coursSlots` | `6` | onglet « En cours » : nombre d'emplacements fixes (DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste) |
 | `maxDownloads` | `3` | films téléchargés en même temps (le plus ancien est mis en pause au-delà) |
@@ -59,7 +59,8 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `maxAheadMin` | `30` | ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur |
 | `maxAheadMB` | `4000` | ... ni plus de N Mo de segments temporaires d'avance (films 8K très lourds) |
 | `firstWaitMs` | `0` | attente max avant de répondre à la 1re demande du lecteur (0 = l'écran de chargement apparaît tout de suite) |
-| `patientMaxMin` | `45` | débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance |
+| `startMode` | `"rapide"` | "rapide" : le film démarre dès minBufferSec de film en tampon, même si le débit est trop faible (pauses possibles ; pratique pour zapper) ; "sans-coupure" : attend l'avance nécessaire pour aller au bout sans pause (patientMaxMin) |
+| `patientMaxMin` | `45` | startMode "sans-coupure", débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance |
 | `landscapeThumbs` | `true` | vignettes 16:9 composées (DeoVR affiche en paysage) ; false = affiche Stremio brute |
 | `stremioPingMs` | `15000` | fréquence du test « Stremio répond-il ? » |
 | `ffmpegRestarts` | `3` | relances de ffmpeg si la conversion plante en cours de film |
@@ -72,9 +73,9 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `loadingCodec` | `'h264'` | codec de l'écran d'attente : h264 (seul codec que le lecteur DeoVR/Windows décode dans un flux HLS : mesuré au casque) ; hevc seulement pour des essais |
 | `asciiBadges` | `true` | DeoVR n'affiche pas les emoji dans ses listes : pastilles en texte [+++] [++] [+] [x] [?] |
 | `jsonDeadlineMs` | `8000` | DeoVR abandonne une fiche vidéo après ~10 s : on répond toujours avant |
-| `dnsMode` | `—` | auto : DNS du PC puis DNS public si échec \| public : DNS public d'abord \| system : DNS du PC seulement |
-| `publicDns` | `['1.1.1.1', '8.8.8.8', '9.9.9.9']` |  |
+| `dnsMode` | `"auto"` | auto : DNS du PC puis DNS public si échec \| public : DNS public d'abord \| system : DNS du PC seulement |
+| `publicDns` | `['1.1.1.1', '8.8.8.8', '9.9.9.9']` | DNS publics utilisés en secours (dnsMode « auto ») ou en premier (« public ») |
 | `debug` | `false` | journaux détaillés (aussi : variable d'environnement DEBUG=1) |
-| `dev` | `—` | mode développeur (--dev, ou "dev": true dans config.json) : journaux détaillés, ffmpeg bavard, page /dev |
-| `stremioApi` | `—` | API du compte Stremio (changer seulement pour les tests) |
-| `tempDir` | `—` | vignettes et segments de lecture (peut être placé sur un autre disque) |
+| `dev` | `false` | mode développeur (--dev, ou "dev": true dans config.json) : journaux détaillés, ffmpeg bavard, page /dev |
+| `stremioApi` | `"https://api.strem.io"` | API du compte Stremio (changer seulement pour les tests) |
+| `tempDir` | `<dossier de données>/tmp` | vignettes et segments de lecture (peut être placé sur un autre disque) |

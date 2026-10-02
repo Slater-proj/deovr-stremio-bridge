@@ -13,7 +13,7 @@ async function startBridge(mocks, config = {}, opts = {}) {
   if (!opts.dataDir || opts.config !== false) fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ firstWaitMs: 1500, scanConcurrency: 3, ...config }));
   let out = '';
   const proc = cp.spawn(process.execPath, [path.join(root, 'bridge', 'server.js'), '--no-browser'], {
-    env: { ...process.env, PORT: String(port), BRIDGE_DATA_DIR: dataDir, ...(opts.login ? { STREMIO_API: mocks.apiUrl } : { ADDON_URLS: mocks.addonUrl }), ...(opts.env || {}), LOCAL_STREMIO: mocks.stremioUrl, SCRAPE_TRACKERS: mocks.trackerHostPort, DNS_MODE: 'system', DEBUG: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    env: { ...process.env, PORT: String(port), BRIDGE_DATA_DIR: dataDir, ...(opts.login ? { STREMIO_API: mocks.apiUrl } : { ADDON_URLS: mocks.addonUrl }), ...(opts.env || {}), LOCAL_STREMIO: mocks.stremioUrl, SCRAPE_TRACKERS: mocks.trackerHostPort, DNS_MODE: 'system', DEBUG: '1', BRIDGE_LAB_PREPARE: '0', ...(opts.env || {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
   proc.stdout.on('data', d => out += d); proc.stderr.on('data', d => out += d);
   const t0 = Date.now(); while (!/Bridge prêt/.test(out)) { if (proc.exitCode !== null || Date.now() - t0 > 20000) throw new Error('le pont ne démarre pas :\n' + out.slice(-1500)); await sleep(100); }
   const base = `http://127.0.0.1:${port}`;

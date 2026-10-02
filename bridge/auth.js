@@ -11,7 +11,9 @@ const needLoginError = () => Object.assign(new Error('Connexion Stremio requise 
 
 module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onChange = () => {} }) {
   let session = null;   // { authKey, emailHint, source: 'config' | 'store' | 'session', scheme }
-  let storeError = '';
+  let storeError = '', unreadable = 0;   // unreadable : date du secrets.dat illisible (copié d'un autre PC / autre compte Windows)
+  const mtimeOf = () => { try { return fs.statSync(path.join(dataDir, secrets.FILE)).mtimeMs; } catch { return 0; } };
+  const storeOk = () => secrets.exists(dataDir) && !(unreadable && unreadable === mtimeOf());   // une clé enregistrée ET lisible
   const token = crypto.randomBytes(24).toString('hex'), fails = [];
 
   async function login(email, password) {
@@ -34,8 +36,8 @@ module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onCh
   async function key() {   // -> { authKey, source } ou lève NEED_LOGIN
     if (cfg.authKey) return { authKey: cfg.authKey, source: 'config' };
     if (session) return session;
-    try { const st = secrets.load(dataDir); if (st && st.authKey) return (session = { authKey: st.authKey, emailHint: st.emailHint || '', source: 'store', scheme: secrets.backend() === 'dpapi' ? 'dpapi' : 'plain' }); }
-    catch (e) { storeError = e.message; log('warn', e.message); }
+    if (!unreadable || unreadable !== mtimeOf()) try { const st = secrets.load(dataDir); if (st && st.authKey) return (session = { authKey: st.authKey, emailHint: st.emailHint || '', source: 'store', scheme: secrets.backend() === 'dpapi' ? 'dpapi' : 'plain' }); }
+    catch (e) { storeError = e.message; if (e.code === 'SECRET_UNREADABLE') unreadable = mtimeOf(); log('warn', e.message); }   // illisible : on ne relance pas PowerShell/DPAPI à chaque requête tant que le fichier ne change pas
     if (cfg.email && cfg.password) {   // ancienne configuration : on se connecte une fois, on garde la clé, on retire le mot de passe
       const s = await login(cfg.email, cfg.password); session = { ...s, source: 'session' };
       if (persist(session)) { session.source = 'store'; log('info', `Connexion Stremio migrée : clé enregistrée (${session.scheme === 'dpapi' ? 'chiffrée par Windows' : 'non chiffrée, hors Windows'})${stripLegacyPassword() ? ', mot de passe retiré de config.json' : ''}`); }
@@ -55,9 +57,10 @@ module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onCh
   }
   function signOut() { session = null; secrets.clear(dataDir); log('info', 'Déconnexion Stremio : clé supprimée'); onChange(); }
   function status() {
-    const connected = !!(cfg.addonUrls.length || cfg.authKey || session || secrets.exists(dataDir) || (cfg.email && cfg.password));
-    return { connecte: connected, source: cfg.addonUrls.length ? 'addons fixes (config)' : cfg.authKey ? 'config.json / variable' : session ? session.source : secrets.exists(dataDir) ? 'store' : (cfg.email ? 'config.json (ancien)' : 'aucune'), compte: session ? session.emailHint : '', stockage: secrets.exists(dataDir) ? secrets.backend() : null, erreurStockage: storeError || undefined };
+    const connected = !!(cfg.addonUrls.length || cfg.authKey || session || storeOk() || (cfg.email && cfg.password));
+    return { connecte: connected, source: cfg.addonUrls.length ? 'addons fixes (config)' : cfg.authKey ? 'config.json / variable' : session ? session.source : storeOk() ? 'store' : (cfg.email ? 'config.json (ancien)' : 'aucune'), compte: session ? session.emailHint : '', stockage: secrets.exists(dataDir) ? secrets.backend() : null, erreurStockage: storeError || undefined };
   }
+  async function check() { if (!cfg.addonUrls.length) try { await key(); } catch {} return status(); }   // au démarrage : lit la clé une fois (un secrets.dat illisible = non connecté -> la page /setup s'ouvre)
 
   // ----- page /setup -----
   const hostOk = h => /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(String(h || '').replace(/:\d+$/, ''));
@@ -90,6 +93,6 @@ module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onCh
     catch (e) { fails.push(now); log('warn', 'connexion Stremio échouée : ' + e.message); return page(res, 200, form(`<p class="err">${esc(e.code === 'LOGIN_REFUSED' ? e.message : 'Connexion impossible (' + e.message + ')')}</p>`)); }
     res.writeHead(303, { location: '/setup?ok=1', 'cache-control': 'no-store' }); res.end();
   }
-  return { key, invalid, signIn, signOut, status, handle, needLoginError, setupToken: token, maskEmail };
+  return { key, invalid, signIn, signOut, status, check, handle, needLoginError, setupToken: token, maskEmail };
 };
 module.exports.maskEmail = maskEmail;

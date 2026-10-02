@@ -4,6 +4,26 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Ajouté (après le 4e test du 02/10)
+- **Démarrage rapide** (`startMode`, `"rapide"` par défaut) : le film démarre dès `minBufferSec` (20 s) de film en tampon, même quand le débit est trop faible (l'écran prévient que des pauses suivront). Avant, un film 8K à 1,5 Mo/s pour 14,8 Mo/s nécessaires attendait 29 min de tampon. `"sans-coupure"` garde l'ancien comportement.
+- **Banc de test, Labos 13 à 16**, pour décider de la bascule HEVC automatique (sans « Retour puis relancer ») et du zapping : 13 = chargement HEVC fMP4 → vrai format de film (HEVC Main 10 8192×4096, MKV copié en fMP4) ; 14 = chargement H.264 **fMP4** → film HEVC fMP4 (le Labo 5 en TS se figeait) ; 15 = chargement HEVC → film H.264 (mauvaise devinette du codec) ; 16 = saut dans une vidéo de 90 s dont les segments arrivent « à la demande » (journal des sauts dans `/debug/labo`). Les scènes lourdes (13, 16) sont fabriquées en dernier ; `/debug/labo` indique si chaque scène est prête.
+- **Profil torrent de Stremio** : les réglages `bt…` de `/settings` (s'ils existent) sont recopiés dans `/debug/perf` et le rapport ; un plafond de débit bas est signalé.
+- Tests : `BRIDGE_LAB_PREPARE=0` (variable d'environnement) évite d'encoder le banc de test dans chaque pont lancé par les tests.
+
+### Corrigé (4e test au casque du 02/10)
+Mesures : Labo 12 (chargement HEVC fMP4 → film HEVC fMP4) **passe** ; Labo 10 (`stereoMode` + `is3d` seuls) : image juste, pas de sélecteur de mode ; Labo 11 (`screenType` seul) : sélecteur présent, image doublée jusqu'au choix « SBS » ; Labo 6 (repli « fiche demandée comme flux ») **passe** ; Labos 2 et 5 échouent toujours.
+- **Films « morts au clic »** : un film annoncé avec des seeders par les trackers mais qui ne reçoit ni métadonnée ni octet en 90 s affichait « RECHERCHE · 2 pairs » sans fin et restait en tête de *Plus de seeds*. Il passe à « BLOQUÉ · aucune donnée », puis « ÉCHEC · aucune donnée » une fois arrêté, est classé en fin de liste et retiré de *Plus de seeds* pendant 2 h.
+- **Catalogues d'addon lents** : la relance en arrière-plan « avec plus de patience » ne réessayait jamais (elle réutilisait l'échec mémorisé et la quarantaine de l'hôte : « toujours en échec » dans les journaux). Elle refait maintenant une vraie requête.
+- **`--report` / `--diagnose`** pendant que le pont tourne : ils renommaient `bridge-debug.log` (> 5 Mo) et `bridge-requests.log` (> 2 Mo) du pont, et le rapport sortait sans journal détaillé ; ils écrivaient aussi un faux « arrêt du processus » dans son journal. La rotation se fait désormais au démarrage du pont seulement.
+- **Labo 12** : il affichait le texte du Labo 5 (« LABO 5 — CHARGEMENT (H.264) »).
+- **Sécurité** : les réponses JSON (`/deovr`, `/debug`, `/status.json`…) n'ont plus l'en-tête `Access-Control-Allow-Origin: *` : une page web ouverte sur le PC ne peut plus lire les titres, chemins et journaux du pont. Une requête dont l'en-tête `Host` est un nom de domaine extérieur est refusée (anti *DNS rebinding*) ; `localhost`, les adresses IP et les noms du réseau local restent acceptés.
+- **Rapport d'assistance** : l'hôte **et le chemin** des URL distantes sont masqués (un chemin d'URL d'addon peut contenir une clé), ainsi que le nom du compte Windows dans les chemins.
+- **DNS** : un addon hébergé chez soi (nom qui pointe vers 192.168.x) échouait quand le DNS public ne le connaissait pas ; la réponse du DNS du PC est gardée (30 min).
+- **`secrets.dat` illisible** (dossier copié d'un autre PC / autre compte Windows) : compté comme « non connecté », la page `/setup` s'ouvre au démarrage ; PowerShell/DPAPI n'est plus relancé à chaque requête.
+- **Longues sessions** : les données périmées (réponses d'addons, mesures, DNS) sont oubliées toutes les 10 min ; `bridge-decisions.log` et `bridge-bilans.log` tournent aussi, et les journaux tournent pendant la session au-delà d'une taille limite.
+- `config.example.json` : `itemsPerTab` = 150 comme le pont.
+- Docs : `CONFIGURATION.md` (plus d'« identifiants dans config.json », valeurs par défaut lisibles, variables d'environnement complètes), README (contenu de la pré-release `dev-build`), INSTALL (variante Node), HTTP-ENDPOINTS, SECURITY, TROUBLESHOOTING, USAGE (pastilles), DEOVR-NOTES (mesures des Labos), modèles de ticket.
+
 ### Corrigé (3e test au casque du 02/10 : résultats des Labos)
 Mesures : Labo 3 (HEVC en HLS fMP4) **passe** ; Labo 9 (HEVC en MKV direct) **passe** ; Labo 4 passe ; Labos 2 (HEVC en HLS TS) et 5 (bascule H.264 TS → HEVC fMP4) échouent ; Labo 8 : le nom `_180_LR` n'est pas reconnu ; les fiches qui **déclarent** le format (Labos 1, 3, 4, 5, 9) n'ont **pas** le sélecteur FLAT/180/360/fisheye, celles qui ne le déclarent pas (Labos 7, 8) l'ont.
 - **Sélecteur de mode de DeoVR** : nouveau réglage `formatMenu` (`auto` par défaut) : le format n'est déclaré dans la fiche que s'il est lu dans le titre/flux ; sinon la fiche ne déclare rien → le menu de DeoVR est présent (image côte à côte brute, DeoVR retient votre choix par film). `declare` = toujours déclaré (image juste d'emblée, pas de menu), `free` = jamais déclaré. Les journaux de décisions indiquent « déclaré » ou « NON déclaré ».

@@ -45,3 +45,20 @@ test('config.json créé au premier lancement : clés connues, port 4477, aucun 
   assert.equal(S.ensure(f), 'cree'); assert.equal(S.ensure(f), 'existe'); assert.equal(JSON.parse(fs.readFileSync(f, 'utf8')).port, 4477); fs.rmSync(f, { force: true });
   fs.writeFileSync(f, '{"port":9}'); assert.equal(S.ensure(f), 'existe'); assert.equal(JSON.parse(fs.readFileSync(f, 'utf8')).port, 9, 'un fichier existant n\'est jamais écrasé'); fs.rmSync(f, { force: true });
 });
+
+test('mémoire : les données périmées sont oubliées (le pont peut tourner des jours), celles du moment sont gardées', () => {
+  const now = Date.now();
+  L.cache.set('vieux', { t: now - 7 * 3600000, v: 1 }); L.cache.set('frais', { t: now, v: 2 });
+  L.clickDead.set('vieux-film', now - 3 * 3600000); L.clickDead.set('film-du-jour', now);
+  L.healthMemo.set('vieux:0', { t: now - 2 * 3600000, level: 1 });
+  L.pruneMemory(now);
+  assert.ok(!L.cache.has('vieux') && L.cache.has('frais'));
+  assert.ok(!L.clickDead.has('vieux-film') && L.clickDead.has('film-du-jour'));
+  assert.ok(!L.healthMemo.has('vieux:0'));
+  L.cache.delete('frais'); L.clickDead.delete('film-du-jour');
+});
+
+test('hostAllowed (anti DNS rebinding) : localhost, IP et noms du réseau local acceptés ; un nom de domaine extérieur refusé', () => {
+  for (const h of ['localhost:4477', '127.0.0.1:4477', '192.168.1.131:4477', '[::1]:4477', 'monpc:4477', 'monpc.local:4477', 'pc.home.arpa', undefined]) assert.ok(L.hostAllowed(h), String(h));
+  for (const h of ['evil.example.com:4477', 'rebind.attaquant.net', '127.0.0.1.nip.io:4477']) assert.ok(!L.hostAllowed(h), h);
+});

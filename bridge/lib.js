@@ -1,4 +1,4 @@
-// Noyau du bridge DeoVR <-> Stremio (partagé par server.js et diagnose.js). Node 18+, zéro dépendance.
+// Noyau du bridge DeoVR <-> Stremio (partagé par server.js, report.js et diagnose.js). Node 20+, zéro dépendance.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -64,7 +64,8 @@ const cfg = {
   maxAheadMin: file.maxAheadMin ?? 30,             // ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur
   maxAheadMB: file.maxAheadMB ?? 4000,             // ... ni plus de N Mo de segments temporaires d'avance (films 8K très lourds)
   firstWaitMs: file.firstWaitMs ?? 0,              // attente max avant de répondre à la 1re demande du lecteur (0 = l'écran de chargement apparaît tout de suite)
-  patientMaxMin: file.patientMaxMin ?? 45,         // débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance
+  startMode: ['rapide', 'sans-coupure'].includes(file.startMode) ? file.startMode : 'rapide',   // "rapide" : le film démarre dès minBufferSec de film en tampon, même si le débit est trop faible (pauses possibles ; pratique pour zapper) ; "sans-coupure" : attend l'avance nécessaire pour aller au bout sans pause (patientMaxMin)
+  patientMaxMin: file.patientMaxMin ?? 45,         // startMode "sans-coupure", débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance
   landscapeThumbs: file.landscapeThumbs ?? true,   // vignettes 16:9 composées (DeoVR affiche en paysage) ; false = affiche Stremio brute
   stremioPingMs: file.stremioPingMs ?? 15000,      // fréquence du test « Stremio répond-il ? »
   ffmpegRestarts: file.ffmpegRestarts ?? 3,        // relances de ffmpeg si la conversion plante en cours de film
@@ -88,7 +89,7 @@ const VERSION_INFO = require('./version'), VERSION = VERSION_INFO.version.split(
 
 // ---------- Logs (buffer circulaire, consultable sur /debug) ----------
 const DEBUGFILE = path.join(DATA_DIR, 'bridge-debug.log');
-try { if (fs.existsSync(DEBUGFILE) && fs.statSync(DEBUGFILE).size > 5e6) fs.renameSync(DEBUGFILE, DEBUGFILE + '.old'); } catch {}
+const rotate = (f, max) => { try { if (fs.existsSync(f) && fs.statSync(f).size > max) fs.renameSync(f, f + '.old'); } catch {} };   // appelé par start() seulement : --report / --diagnose chargent ce module pendant que le pont tourne et ne doivent pas toucher à ses journaux
 const logBuf = [];
 const recentWarn = new Map();
 function log(level, ...a) {
@@ -107,13 +108,12 @@ function log(level, ...a) {
 // ---------- Filets de sécurité : aucune erreur ne doit arrêter le pont sans laisser de trace ----------
 process.on('uncaughtException', e => { log('error', `EXCEPTION NON GÉRÉE (le pont continue) : ${e && e.stack || e}`); });
 process.on('unhandledRejection', e => { log('error', `PROMESSE REJETÉE NON GÉRÉE : ${e && e.stack || e}`); });
-process.on('exit', c => { try { fs.appendFileSync(DEBUGFILE, `${new Date().toISOString()} [info] arrêt du processus (code ${c})\n`); } catch {} });
 
 // ---------- DNS de secours : si le DNS du PC/box/FAI ne résout pas un hôte (ou renvoie une adresse bidon), on demande à un DNS public ----------
 const dnsMod = require('dns'), sysLookup = dnsMod.lookup;
 const pubResolver = new dnsMod.Resolver({ timeout: 2500, tries: 2 });
 try { pubResolver.setServers(cfg.publicDns); } catch (e) { log('warn', `publicDns invalide : ${e.message}`); }
-const dnsPub = new Map(), dnsForce = new Map(), dnsStats = { system: 0, publicUsed: 0, publicFail: 0, hosts: {} };
+const dnsPub = new Map(), dnsForce = new Map(), dnsLocal = new Map(), dnsStats = { system: 0, publicUsed: 0, publicFail: 0, hosts: {} };
 const isBogon = a => /^(0\.|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|::1?$|fe80:)/i.test(a || '');
 const dnsCare = h => typeof h === 'string' && h.includes('.') && !/^[\d.]+$/.test(h) && !h.includes(':') && !/(^|\.)(localhost|local|lan|home)$/i.test(h);
 function dohResolve(host) {   // DNS sur HTTPS vers une adresse IP (aucun DNS nécessaire)
@@ -143,9 +143,10 @@ dnsMod.lookup = function (host, opts, cb) {
   if (cfg.dnsMode === 'public' || (dnsForce.has(host) && Date.now() - dnsForce.get(host) < 30 * 60000)) return viaPublic(host, opts, (e, ...r) => (e ? sysLookup.call(dnsMod, host, opts, cb) : cb(null, ...r)));
   sysLookup.call(dnsMod, host, opts, (err, addr, fam) => {
     const first = Array.isArray(addr) ? (addr[0] || {}).address : addr;
-    if (!err && first && !isBogon(first)) { dnsStats.system++; return cb(null, addr, fam); }
-    if (!dnsForce.has(host)) log('warn', `DNS du PC : « ${host} » ${err ? 'non résolu (' + err.code + ')' : 'résolu vers une adresse bidon ' + first} -> essai DNS public`);
-    viaPublic(host, opts, cb, err || Object.assign(new Error('adresse bidon ' + first), { code: 'EBOGON' }));
+    if (!err && first && (!isBogon(first) || Date.now() - (dnsLocal.get(host) || 0) < 30 * 60000)) { dnsStats.system++; return cb(null, addr, fam); }
+    if (!dnsForce.has(host)) log('warn', `DNS du PC : « ${host} » ${err ? 'non résolu (' + err.code + ')' : 'résolu vers une adresse locale ' + first} -> essai DNS public`);
+    if (err) return viaPublic(host, opts, cb, err);
+    viaPublic(host, opts, (e, ...r) => { if (!e) return cb(null, ...r); dnsLocal.set(host, Date.now()); dnsStats.hosts[host] = 'local'; cb(null, addr, fam); });   // adresse locale (addon hébergé chez soi, ex. 192.168.x) inconnue du DNS public : on garde la réponse du DNS du PC (30 min) au lieu d'échouer
   });
 };
 const forcePublicDns = host => { if (cfg.dnsMode !== 'system' && dnsCare(host) && !dnsForce.has(host)) { dnsForce.set(host, Date.now()); return true; } return false; };
@@ -164,11 +165,11 @@ function redact(u) {
 const cache = new Map();
 const failCache = new Map();
 const inflight = new Map();
-async function cached(key, ttlMs, fn) {
+async function cached(key, ttlMs, fn, o = {}) {   // o.retry : nouvel essai voulu (relance patiente d'un addon lent) -> l'échec mémorisé ne compte pas
   const hit = cache.get(key);
   if (hit && Date.now() - hit.t < ttlMs) return hit.v;
   const f = failCache.get(key);
-  if (f && Date.now() - f.t < 60000) throw f.e; // évite de re-attendre un addon en panne à chaque ouverture
+  if (f && !o.retry && Date.now() - f.t < 60000) throw f.e; // évite de re-attendre un addon en panne à chaque ouverture
   if (inflight.has(key)) return inflight.get(key);   // la même requête est déjà en cours : on la partage (DeoVR en envoie des dizaines identiques)
   const p = (async () => {
     try { const v = await fn(); cache.set(key, { t: Date.now(), v }); failCache.delete(key); return v; }
@@ -219,7 +220,7 @@ async function getJsonRaw(url, opts = {}) {
   const t0 = Date.now();
   const host = new URL(url).host;
   const down = hostDown.get(host);
-  if (down && Date.now() - down.t < 120000) throw new Error(`hôte injoignable (${down.code}) — ${redact(url)}`);
+  if (down && !opts.ignoreDown && Date.now() - down.t < 120000) throw new Error(`hôte injoignable (${down.code}) — ${redact(url)}`);
   let r;
   try {
     r = await fetch(url, { signal: AbortSignal.timeout(15000), ...opts, headers: { 'user-agent': UA, ...(opts.headers || {}) } });
@@ -352,7 +353,7 @@ async function fetchCatalog(entry, query, skip = 0, patient = false) {
   if (query) extra.push(`search=${encodeURIComponent(query)}`);
   if (skip) extra.push(`skip=${skip}`);
   const url = `${addon.base}/catalog/${cat.type}/${encodeURIComponent(cat.id)}${extra.length ? '/' + extra.join('&') : ''}.json`;
-  const data = await cached(url, cfg.cacheMinutes * 60000, () => getJson(url, { signal: AbortSignal.timeout(cfg.catalogTimeoutMs * (patient ? 4 : 1)) }));   // patient : relance en arrière-plan d'un addon lent
+  const data = await cached(url, cfg.cacheMinutes * 60000, () => getJson(url, { signal: AbortSignal.timeout(cfg.catalogTimeoutMs * (patient ? 4 : 1)), ...(patient ? { ignoreDown: true, noQuarantine: true } : {}) }), { retry: patient });   // patient : relance en arrière-plan d'un addon lent (ni l'échec mémorisé ni la quarantaine de l'hôte ne l'empêchent)
   for (const m of data.metas || []) if (m && m.id) { catalogMetas.set(m.id, m); noteCat(m.id, entry); }
   return data.metas || [];
 }
@@ -407,9 +408,14 @@ const mbs = x => `${((x || 0) / 1e6).toFixed(1).replace('.', ',')} Mo/s`;
 const fmtDur = s => (s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
 // Pastille : TOUJOURS la même dans la liste ET dans le titre de la fiche vidéo (DeoVR remplace le titre de la liste par celui de la fiche après 2-3 s).
 // Film lancé par un clic : état du téléchargement ; sinon : seeders annoncés par les trackers (aucun test, aucun téléchargement).
+// Film « mort au clic » : téléchargement lancé, mais aucune métadonnée ni aucun octet après 90 s alors que les trackers annonçaient des seeders
+// (constaté le 02/10 : torrents annoncés S6 par les trackers publics, 2 pairs qui n'envoient rien). Classé en fin de liste et retiré de « Plus de seeds » pendant 2 h.
+const clickDead = new Map();   // id film -> date du constat
+const isClickDead = id => { const t = clickDead.get(id); return !!t && Date.now() - t < 2 * 3600000; };
 function tagInfo(m) {
   const D = dlByFilm.get(m.id);
   if (D) { const s = dlState(D); return { label: s.label, cls: s.cls, dl: true }; }
+  if (isClickDead(m.id)) return { label: 'ÉCHEC · aucune donnée', cls: 'k' };
   const h = filmHealth.get(m.id);
   if (!h) return (isVR(m, '') || cfg.scanAll) ? { label: 'S?', cls: 'u' } : null;
   const S = h.http ? 'HTTP' : (h.level < 0 && !h.seeders) ? 'S?' : 'S' + (h.seeders || 0);
@@ -455,7 +461,7 @@ function metaToItem(m, base) {
 }
 const isHidden = id => { const h = filmHealth.get(id); return !!(h && h.hidden); };   // seulement les films SANS aucune source exploitable
 // tri : beaucoup de seeders d'abord, inconnu au milieu, 0 seeder annoncé en fin de liste (jamais masqué)
-const sortKey = id => { const h = filmHealth.get(id); if (!h || h.level < 0) return 2.5; return ({ 3: 5, 4: 5, 2: 4, 1: 2.8, 0: 0.5 })[h.level] ?? 2.5; };
+const sortKey = id => { if (isClickDead(id)) return 0.4; const h = filmHealth.get(id); if (!h || h.level < 0) return 2.5; return ({ 3: 5, 4: 5, 2: 4, 1: 2.8, 0: 0.5 })[h.level] ?? 2.5; };
 function toScene(name, metas, base) {
   if (cfg.vrOnly) metas = metas.filter(m => isVR(m, name));
   const seen = new Set();
@@ -591,7 +597,7 @@ function dlScene(base) {   // « En cours » : emplacements FIXES (la liste ne c
 }
 const vrPool = () => [...catalogMetas.values()].filter(m => (!cfg.vrOnly || isVR(m, '')) && !isHidden(m.id));
 function seedMetas(limit = 60) {   // « Plus de seeds » : seeders annoncés par les trackers (scrape UDP)
-  return vrPool().map(m => ({ m, h: filmHealth.get(m.id) })).filter(x => x.h && (x.h.seeders || 0) > 0).sort((a, b) => b.h.seeders - a.h.seeders).slice(0, limit).map(x => x.m);
+  return vrPool().map(m => ({ m, h: filmHealth.get(m.id) })).filter(x => x.h && (x.h.seeders || 0) > 0 && !isClickDead(x.m.id)).sort((a, b) => b.h.seeders - a.h.seeders).slice(0, limit).map(x => x.m);
 }
 function newMetas(limit = 60) {   // « Nouveautés » : année de sortie la plus récente
   return vrPool().map((m, i) => ({ m, y: +yearOf(m) || 0, i })).filter(x => x.y).sort((a, b) => b.y - a.y || a.i - b.i).slice(0, limit).map(x => x.m);
@@ -927,7 +933,6 @@ const healthMemo = new Map();
 const relayState = new Map();    // hash -> { idx, lastStart, size, served, rate[], title, length }
 const reqLog = [];
 const LOGFILE = path.join(DATA_DIR, 'bridge-requests.log');
-try { if (fs.existsSync(LOGFILE) && fs.statSync(LOGFILE).size > 2e6) fs.renameSync(LOGFILE, LOGFILE + '.old'); } catch {}
 function recordReq(e) {
   reqLog.push(e); if (reqLog.length > 300) reqLog.shift();
   try { fs.appendFileSync(LOGFILE, JSON.stringify(e) + '\n'); } catch {}
@@ -1182,11 +1187,12 @@ const dlSorted = () => [...dls.values()].sort((a, b) => (b.active - a.active) ||
 function dlState(D) {   // { code, label (court, ASCII+Latin-1 : affiché dans les titres DeoVR), cls }
   const now = Date.now(), age = now - (D.activatedAt || now), sp = D.speed || 0, s = D.live;
   if (!D.active && /^disque/.test(D.pausedWhy || '')) return { code: 'pause', label: 'ARRÊTÉ · disque plein', cls: 'r' };
+  if (!D.active && isClickDead(D.id)) return { code: 'pause', label: 'ÉCHEC · aucune donnée', cls: 'k' };
   if (!D.active) return { code: 'pause', label: D.bgDone ? 'EN CACHE · COMPLET' : 'PAUSE · reprise au clic', cls: 'b' };
   if (D.bgDone || (D.size && D.maxPos >= D.size - 1)) return { code: 'complete', label: 'PRÊT · COMPLET', cls: 'g' };
   if (s && !s.closed && s.realReady) return { code: 'ready', label: s.direct ? 'PRÊT · relancez le film' : `PRÊT · ${fmtDur(aheadSec(s))} en tampon`, cls: 'g' };
   const got = D.readBytes > 0 || D.netBytes > 0;
-  if (!D.meta && !got) return (age > 60000 && D.peers === 0) ? { code: 'stuck', label: 'BLOQUÉ · 0 pair', cls: 'r' } : { code: 'search', label: `RECHERCHE · ${D.peers} pair${D.peers > 1 ? 's' : ''}`, cls: 'o' };
+  if (!D.meta && !got) return (age > 60000 && D.peers === 0) ? { code: 'stuck', label: 'BLOQUÉ · 0 pair', cls: 'r' } : age > 90000 ? { code: 'stuck', label: 'BLOQUÉ · aucune donnée', cls: 'r' } : { code: 'search', label: `RECHERCHE · ${D.peers} pair${D.peers > 1 ? 's' : ''}`, cls: 'o' };
   if (!got) return age > 90000 ? { code: 'stuck', label: 'BLOQUÉ · 0 donnée', cls: 'r' } : { code: 'meta', label: 'MÉTADONNÉES OK · en attente', cls: 'o' };
   const pct = Math.round(100 * (D.progress || 0));
   return { code: 'dl', label: `EN COURS ${pct} %${sp > 5e4 ? ' · ' + mbs(sp) : ''}`, cls: D.need && sp && sp < D.need * 0.8 ? 'o' : 'g' };
@@ -1211,8 +1217,8 @@ async function dlTick(D) {
   D.maxPos = Math.max(D.bgPos, D.live ? D.live.seqPos || 0 : 0);
   D.progress = Math.min(1, Math.max((st && st.streamProgress) || 0, D.size ? D.maxPos / D.size : 0));
   const got = D.readBytes > 0 || D.netBytes > 0;
-  if (got && !D.firstData) { D.firstData = now; dlLog(D, 'info', `premières données reçues après ${Math.round((now - D.activatedAt) / 1000)} s (pairs ${D.peers})`); }
-  if (!got && !D.noDataLogged && now - D.activatedAt > 90000) { D.noDataLogged = true; dlLog(D, 'warn', `AUCUNE donnée après 90 s (pairs ${D.peers}, connexions ${D.conns}, métadonnées ${D.meta ? 'oui' : 'non'}) : sources mortes, pairs qui n'envoient rien ou torrent privé. À comparer avec la même vidéo dans l'appli Stremio.`); }
+  if (got && !D.firstData) { D.firstData = now; clickDead.delete(D.id); dlLog(D, 'info', `premières données reçues après ${Math.round((now - D.activatedAt) / 1000)} s (pairs ${D.peers})`); }
+  if (!got && !D.noDataLogged && now - D.activatedAt > 90000) { D.noDataLogged = true; if (!D.meta) { clickDead.set(D.id, now); vidInvalidate(D.id); } dlLog(D, 'warn', `AUCUNE donnée après 90 s (pairs ${D.peers}, connexions ${D.conns}, métadonnées ${D.meta ? 'oui' : 'non'}) : sources mortes, pairs qui n'envoient rien ou torrent privé. À comparer avec la même vidéo dans l'appli Stremio.`); }
   const stt = dlState(D), lab = stt.label;
   if (stt.code !== D.lastCode || now - (D.lastLabT || 0) > 15000) {   // une ligne par changement d'état, sinon toutes les 15 s
     D.lastCode = stt.code; D.lastLab = lab; D.lastLabT = now;
@@ -1309,7 +1315,7 @@ function bufferTarget(D) {
   // Avance (en secondes de film) nécessaire pour aller jusqu'au bout sans coupure : L = durée × (1 − débit/besoin), +10 % de marge.
   // Si le débit couvre le besoin, un petit tampon suffit. L'avance est plafonnée (patientMaxMin, et un peu sous maxAheadMin).
   const need = D.need || 0, sp = D.speed || 0, R = D.runtime || 0;
-  if (!need || !sp) return cfg.minBufferSec;
+  if (!need || !sp || cfg.startMode === 'rapide') return cfg.minBufferSec;   // « rapide » (défaut depuis le 4e test : « au bout de 20-30 s on peut lancer, je zappe ») : pas d'attente de l'avance sans coupure
   const r = sp / need;
   if (r >= 1.3) return cfg.minBufferSec;
   if (r >= 1) return Math.max(60, cfg.minBufferSec);
@@ -1456,7 +1462,11 @@ async function checkCache() {
     const msgs = [];
     if (size && size < 20e9) msgs.push(`cache Stremio = ${Math.round(size / 1e9)} Go (conseillé : illimité ou ≥ 20 Go : Paramètres > Streaming)`);
     if (free != null && free < 15e9) msgs.push(`disque du cache presque plein : ${Math.round(free / 1e9)} Go libres`);
-    Object.assign(cacheInfo, { lu: true, sizeBytes: size, cacheSizeGo: size ? Math.round(size / 1e9) : 'illimité/inconnu', cacheRoot: root ? root.replace(/^(.{3}).*([\\/][^\\/]*)$/, '$1…$2') : null, libreGo: free != null ? Math.round(free / 1e9) : null, avertissements: msgs, t: new Date().toISOString() });
+    // profil torrent de Stremio (champs « bt… » de /settings, s'ils existent) : recopié dans /debug/perf et le rapport ; un plafond de débit bas est signalé
+    const bt = {}; for (const [k, x] of Object.entries(v)) if (/^bt/i.test(k) && ['number', 'string', 'boolean'].includes(typeof x)) bt[k] = x;
+    const hard = bt.btDownloadSpeedHardLimit;
+    if (typeof hard === 'number' && hard > 0 && hard < 8e6) msgs.push(`Stremio limite le débit des torrents à ${mbs(hard)} (profil torrent) : Paramètres > Streaming > choisir un profil plus rapide`);
+    Object.assign(cacheInfo, { lu: true, sizeBytes: size, cacheSizeGo: size ? Math.round(size / 1e9) : 'illimité/inconnu', cacheRoot: root ? root.replace(/^(.{3}).*([\\/][^\\/]*)$/, '$1…$2') : null, libreGo: free != null ? Math.round(free / 1e9) : null, torrent: Object.keys(bt).length ? bt : null, avertissements: msgs, t: new Date().toISOString() });
     const key = msgs.join('|'); if (key !== checkCache.last) { checkCache.last = key; log(msgs.length ? 'warn' : 'info', msgs.length ? 'cache Stremio : ' + msgs.join(' ; ') : 'cache Stremio : réglages corrects'); }
     cacheWarn = size && size < 20e9 ? { sizeBytes: size } : null;
   } catch (e) { cacheInfo.lu = false; cacheInfo.erreur = e.message; }
@@ -1502,7 +1512,7 @@ function loadStatus(s) {
   else if (stremioDown && !s.realReady) problem = `Stremio ne répond pas : lancez l'application Stremio (son serveur fait le téléchargement), puis relancez le film.`;
   else if (!s.realReady) {
     if (age > 90 && !got) problem = D.peers > 0 ? `Aucune donnée reçue après ${Math.round(age)} s malgré ${D.peers} pair(s) : sources probablement mortes. Choisissez un autre film.` : `Aucune source trouvée après ${Math.round(age)} s (0 pair). Ce film ne démarrera sans doute pas : choisissez-en un autre.`;
-    else if (need && sp > 0 && age > 12 && sp < need * 0.8) { const w = waitPlan(D); problem = `Débit insuffisant : ${mbs(sp)} sur ${mbs(need)} nécessaires. ` + (w && w.complete ? `Pour lire sans coupure il faut ${Math.round(w.leadSec / 60)} min de film d'avance (attente environ ${Math.max(1, Math.round(w.waitSec / 60))} min). ` : `Le film est trop lourd pour ce débit : des pauses sont probables. `) + `Le téléchargement continue si vous quittez.`; }
+    else if (need && sp > 0 && age > 12 && sp < need * 0.8) { const w = waitPlan(D); problem = `Débit insuffisant : ${mbs(sp)} sur ${mbs(need)} nécessaires. ` + (cfg.startMode === 'rapide' ? `Le film démarre dès ${cfg.minBufferSec} s de tampon, puis fera des pauses. ` : w && w.complete ? `Pour lire sans coupure il faut ${Math.round(w.leadSec / 60)} min de film d'avance (attente environ ${Math.max(1, Math.round(w.waitSec / 60))} min). ` : `Le film est trop lourd pour ce débit : des pauses sont probables. `) + `Le téléchargement continue si vous quittez.`; }
     else if (cacheWarn && D.size && cacheWarn.sizeBytes && D.size > cacheWarn.sizeBytes) problem = `Le cache de Stremio (${Math.round(cacheWarn.sizeBytes / 1e9)} Go) est plus petit que ce film (${Math.round(D.size / 1e9)} Go) : Stremio > Paramètres > Streaming > Cache.`;
   }
   let eta = null;
@@ -1894,6 +1904,16 @@ function vidFor(key, fn) {   // fiche vidéo : cache 45 s des réponses valides 
   vidInflight.set(key, p); p.then(() => vidInflight.delete(key), () => vidInflight.delete(key)); return p;
 }
 function vidInvalidate(id) { for (const k of [...vidCache.keys()]) if (k.includes(`:${id}:`)) vidCache.delete(k); }   // l'état du film a changé (prêt...) : la prochaine fiche doit être recalculée, pas servie depuis le cache de 45 s
+// ----- mémoire : le pont peut tourner des jours (démarrage automatique) : on oublie ce qui est périmé au lieu de tout garder -----
+function pruneMemory(now = Date.now()) {
+  const drop = (m, maxMs, t = v => v.t) => { for (const [k, v] of m) if (now - (t(v) || 0) > maxMs) m.delete(k); };
+  drop(cache, 6 * 3600000); drop(failCache, 60000); drop(seedMemo, 10 * 60000); drop(healthMemo, 3600000); drop(buildVideo.seen, 60000, v => v);
+  drop(dnsPub, 10 * 60000); drop(dnsForce, 30 * 60000, v => v); drop(dnsLocal, 30 * 60000, v => v); drop(clickDead, 2 * 3600000, v => v); drop(hostDown, 5 * 60000);
+  if (Object.keys(dnsStats.hosts).length > 500) dnsStats.hosts = {};
+  const keep = new Set([...dls.values()].map(D => D.hash));   // paramètres des torrents lancés : toujours gardés (sources de l'addon)
+  for (const m of [torrentQ, relayState, hashFilm]) if (m.size > 3000) for (const k of m.keys()) if (!keep.has(k)) m.delete(k);
+}
+setInterval(pruneMemory, 10 * 60000).unref();
 const rootHits = [];   // dernières demandes de la racine (/ et /deovr) : ce que DeoVR demande vraiment quand on tape l'adresse du pont
 function perfData() {
   const lv = {}; for (const [, h] of filmHealth) { const k = h.hidden ? 'masqués(aucune source)' : (BADGES[h.level] || '⚪'); lv[k] = (lv[k] || 0) + 1; }
@@ -1916,14 +1936,26 @@ async function warmup(port) {   // au démarrage puis toutes les 8 min : catalog
 
 // ---------- Serveur HTTP ----------
 const platformOf = req => (/Android|Quest|Oculus|Pico/i.test(req.headers['user-agent'] || '') ? 'quest' : cfg.platform);
-const send = (res, code, obj) => {
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': 'no-store, no-cache, must-revalidate, max-age=0', pragma: 'no-cache', expires: '0' });   // DeoVR garde la bibliothèque en mémoire : on lui interdit de réutiliser une ancienne réponse
+const send = (res, code, obj) => {   // pas d'en-tête CORS : DeoVR n'en a pas besoin, et une page web ouverte sur le PC ne doit pas pouvoir lire /debug, /status.json… (titres, chemins, journaux)
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store, no-cache, must-revalidate, max-age=0', pragma: 'no-cache', expires: '0' });   // DeoVR garde la bibliothèque en mémoire : on lui interdit de réutiliser une ancienne réponse
   res.end(JSON.stringify(obj, null, cfg.debug ? 2 : 0));
 };
 
+// Anti « DNS rebinding » : un site web pourrait faire pointer son propre nom de domaine vers 127.0.0.1 pour lire le pont depuis le navigateur du PC.
+// Seuls sont acceptés localhost, les adresses IP et les noms du réseau local (sans point, .local, .lan, .home, .internal, .home.arpa) : DeoVR utilise toujours l'un d'eux.
+function hostAllowed(h) {
+  if (!h) return true;
+  const n = String(h).toLowerCase().replace(/:\d+$/, '').replace(/^\[(.*)\]$/, '$1');
+  return n === 'localhost' || /^[\d.]+$/.test(n) || n.includes(':') || !n.includes('.') || /\.(localhost|local|lan|home|internal|home\.arpa)$/.test(n);
+}
 function start(port = cfg.port) {
+  const DECFILE = path.join(DATA_DIR, 'bridge-decisions.log');
+  rotate(DEBUGFILE, 5e6); rotate(LOGFILE, 2e6); rotate(DECFILE, 5e6); rotate(BILAN_FILE, 1e6);
+  setInterval(() => { rotate(DEBUGFILE, 20e6); rotate(LOGFILE, 10e6); rotate(DECFILE, 10e6); }, 30 * 60000).unref();   // longues sessions (mode dev : sortie d'ffmpeg) : le journal ne grossit pas sans fin
+  process.on('exit', c => { try { fs.appendFileSync(DEBUGFILE, `${new Date().toISOString()} [info] arrêt du processus (code ${c})\n`); } catch {} });
   log('info', `Configuration : Node ${process.versions.node} | ${process.platform} ${os.release()} | port ${port} | plateforme ${cfg.platform} | ffmpeg ${ffmpegOk ? 'oui' : 'non'} | DNS ${cfg.dnsMode} | vrOnly ${cfg.vrOnly} | maxDownloads ${cfg.maxDownloads} | garde ${cfg.holdMinutes} min | trackers ${cfg.scrapeTrackers.length} | dossiers locaux ${cfg.localDirs.length}`);
   const server = http.createServer(async (req, res) => {
+    if (!hostAllowed(req.headers.host)) { log('warn', `requête refusée : en-tête Host « ${String(req.headers.host).slice(0, 60)} » (protection contre le DNS rebinding)`); res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(`Adresse refusée : utilisez http://localhost:${cfg.port} ou l'adresse IP de ce PC.`); }
     const u = new URL(req.url, `http://${req.headers.host}`);
     const base = `http://${req.headers.host}`;
     log('debug', `${req.method} ${u.pathname}${u.search} range=${req.headers.range || '-'} ua=${req.headers['user-agent'] || '-'}`);
@@ -2018,7 +2050,8 @@ function start(port = cfg.port) {
       send(res, 500, { error: e.message });
     }
   });
-  return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, cfg.bindHost, () => { selfPort = server.address().port; if (cfg.testScene && ffmpegOk) setTimeout(() => { try { lab().prepare(); } catch {} }, 8000).unref(); setTimeout(() => warmup(port), 2000); setInterval(() => warmup(port), 8 * 60000).unref(); resolve(server); }); });
+  // BRIDGE_LAB_PREPARE=0 : banc de test fabriqué au premier clic seulement (tests automatiques : pas d'encodage HEVC dans chaque pont lancé)
+  return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, cfg.bindHost, () => { selfPort = server.address().port; if (cfg.testScene && ffmpegOk && env.BRIDGE_LAB_PREPARE !== '0') setTimeout(() => { try { lab().prepare(); } catch {} }, 8000).unref(); setTimeout(() => warmup(port), 2000); setInterval(() => warmup(port), 8 * 60000).unref(); resolve(server); }); });
 }
 
 function devPage(host) {   // /dev (mode --dev uniquement) : tous les points d'observation au même endroit
@@ -2031,4 +2064,4 @@ async function selfCheck() {
   catch {}   // injoignable : stremioPing() le signale une seule fois (message « Stremio n'est pas lancé »)
   if (!fs.existsSync(path.join(RES_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier resources/test incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };

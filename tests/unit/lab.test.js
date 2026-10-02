@@ -70,3 +70,38 @@ test('pastille : seeders seulement, jamais la qualité (8K...) déjà présente 
   L.filmHealth.set('tt-lab2', { level: 3, seeders: 6, res: 2160, t: Date.now() });
   assert.equal(L.healthTag({ id: 'tt-lab2', name: 'Film 4K' }), '[S6] ');
 });
+
+test('banc de test : les Labos 5 et 12 affichent leur propre numéro et le bon codec de chargement (régression : le Labo 12 affichait « LABO 5 — CHARGEMENT (H.264) »)', async () => {
+  const { dir, lab } = mk();
+  for (const k of ['loader-fmp4', 'loader-hevc']) await lab.handle(req(), res(), k, 'index.m3u8');
+  const a5 = fs.readFileSync(path.join(dir, 'lab', 'loader-fmp4', 'texte-a.txt'), 'utf8'), a12 = fs.readFileSync(path.join(dir, 'lab', 'loader-hevc', 'texte-a.txt'), 'utf8');
+  assert.match(a5, /^LABO 5 — CHARGEMENT\nH\.264 TS$/m);
+  assert.match(a12, /^LABO 12 — CHARGEMENT\nHEVC fMP4$/m, 'titre et codec sur des lignes courtes (≤ 32 caractères)'); assert.ok(!/LABO 5/.test(a12), a12);
+  assert.match(fs.readFileSync(path.join(dir, 'lab', 'loader-hevc', 'texte-b.txt'), 'utf8'), /LABO 12 — FILM/);
+});
+
+test('Labos 13 à 15 (bascule HEVC automatique) : Labo 13 = vrai format de film (HEVC Main 10 8192×4096 en MKV, copié tel quel en fMP4 hvc1) ; textes 14 et 15 justes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-lab-')), calls = [];
+  const lab = create({ cfg: { tempDir: dir, ffmpeg: 'ffmpeg' }, log: () => {}, serveLocal: (q, r) => r.end(), font: '', escF: x => x, ffmpegOk: true, hevcOk: true, thumb: b => b + '/t.jpg', runner: async a => { calls.push(a.join(' ')); return ''; } });
+  for (const k of ['loader-8k', 'loader-h264fmp4', 'loader-wrong']) await lab.handle(req(), res(), k, 'index.m3u8');
+  const c13 = calls.filter(c => /b_src\.mkv/.test(c));
+  assert.ok(c13.some(c => /s=4096x4096/.test(c) && /yuv420p10le/.test(c) && /libx265/.test(c)), 'film 8K 10 bits encodé en MKV');
+  assert.ok(c13.some(c => /-i b_src\.mkv/.test(c) && /-c:v copy -tag:v hvc1/.test(c) && /-hls_segment_type fmp4/.test(c)), 'copié tel quel en HLS fMP4 (comme le ferait le pont)');
+  const txt = (k, f) => fs.readFileSync(path.join(dir, 'lab', k, f), 'utf8');
+  assert.match(txt('loader-h264fmp4', 'texte-a.txt'), /^LABO 14 — CHARGEMENT\nH\.264 fMP4$/m);
+  assert.match(txt('loader-wrong', 'texte-b.txt'), /^LABO 15 — FILM\nH\.264 fMP4$/m);
+  assert.match(txt('loader-8k', 'texte-b.txt'), /^HEVC 10 bits 8K fMP4$/m);
+  for (const k of ['loader-8k', 'loader-h264fmp4', 'loader-wrong', 'zap-vod']) assert.ok(lab.video(k, 'http://h:1').encodings[0].videoSources[0].url.endsWith(`/lab/${k}/index.m3u8`), k);
+  assert.equal(lab.video('zap-vod', 'http://h:1').videoLength, 90);
+});
+
+test('Labo 16 (zapper) : un segment demandé loin du précédent est compté comme un saut ; lecture dans l\'ordre = aucun saut', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-lab-')), logs = [];
+  const lab = create({ cfg: { tempDir: dir, ffmpeg: 'ffmpeg' }, log: (l, m) => logs.push(m), serveLocal: (q, r) => r.end(), font: '', escF: x => x, ffmpegOk: true, hevcOk: true, thumb: b => b, runner: async () => '', zapDelayMs: 0 });
+  const d = path.join(dir, 'lab', 'zap-vod'); fs.mkdirSync(d, { recursive: true }); for (let i = 0; i < 23; i++) fs.writeFileSync(path.join(d, `seg${String(i).padStart(3, '0')}.ts`), 'x'); fs.writeFileSync(path.join(d, 'seg.m3u8'), '#EXTM3U');
+  for (const i of [0, 1, 2]) await lab.handle(req(), res(), 'zap-vod', `seg00${i}.ts`);
+  assert.match(lab.data().scenes['zap-vod'].verdict, /aucun saut/);
+  for (const i of ['015', '016', '005']) await lab.handle(req(), res(), 'zap-vod', `seg${i}.ts`);
+  const v = lab.data().scenes['zap-vod'].verdict; assert.match(v, /2 saut\(s\)/); assert.match(v, /0 1 2 15 16 5/);
+  assert.ok(logs.some(m => /SAUT du segment 2 au segment 15/.test(m)));
+});

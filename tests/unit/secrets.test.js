@@ -26,3 +26,13 @@ describe('stockage de la clé Stremio', () => {
     fs.writeFileSync(path.join(d, S.FILE), 'pas du json'); assert.equal(S.load(d), null);
   });
 });
+
+test('secrets.dat illisible (dossier copié d\'un autre PC) : « non connecté » (la page /setup s\'ouvre), lu une seule fois tant que le fichier ne change pas', async () => {
+  const d = tmp(), createAuth = require('../../bridge/auth'), logs = [];
+  fs.writeFileSync(path.join(d, S.FILE), JSON.stringify({ v: 1, scheme: 'plain', data: Buffer.from('pas du json').toString('base64') }));
+  const a = createAuth({ cfg: { addonUrls: [], authKey: '', email: '', password: '', port: 4477, stremioApi: 'http://127.0.0.1:9' }, log: (l, m) => logs.push(m), post: async () => ({}), dataDir: d });
+  const st = await a.check();
+  assert.equal(st.connecte, false, 'avant : « connecté » dès que le fichier existait');
+  await assert.rejects(a.key(), e => e.code === 'NEED_LOGIN');
+  assert.equal(logs.filter(m => /illisible/.test(m)).length, 1, 'le fichier illisible n\'est pas relu à chaque requête');
+});

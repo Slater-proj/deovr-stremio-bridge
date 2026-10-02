@@ -11,6 +11,17 @@ describe('ligne de commande', () => {
     const S = require('../../bridge/secrets'), d = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-')); S.save(d, { authKey: 'k' });
     const r = cp.spawnSync(process.execPath, [server, '--logout'], { encoding: 'utf8', env: { ...process.env, BRIDGE_DATA_DIR: d } }); assert.equal(r.status, 0); assert.ok(!S.exists(d));
   });
+  test('--report pendant que le pont tourne : ne renomme pas ses journaux et n\'y écrit pas de faux « arrêt du processus » (régression : rapport sans journal détaillé)', { timeout: 30000 }, () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-')), log = path.join(d, 'bridge-debug.log'), big = 'x'.repeat(6e6) + '\n2026-10-02T10:00:00.000Z [info] DERNIERE-LIGNE-DU-PONT https://addon.example.com/realdebrid=CLE-SECRETE-42/manifest.json C:\\Users\\Clement\\Downloads\\pont\n';
+    fs.writeFileSync(log, big); fs.writeFileSync(path.join(d, 'bridge-requests.log'), 'r'.repeat(3e6));
+    const r = cp.spawnSync(process.execPath, [server, '--report'], { encoding: 'utf8', timeout: 25000, env: { ...process.env, BRIDGE_DATA_DIR: d, BRIDGE_NO_BROWSER: '1', PORT: '9', LOCAL_STREMIO: 'http://127.0.0.1:9' } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!fs.existsSync(log + '.old') && !fs.existsSync(path.join(d, 'bridge-requests.log.old')), 'journaux renommés par --report');
+    const after = fs.readFileSync(log, 'utf8'); assert.ok(after.startsWith(big), 'journal du pont tronqué par --report'); assert.ok(!/arrêt du processus/.test(after), 'faux « arrêt du processus » écrit par --report');
+    const rep = fs.readFileSync(path.join(d, 'rapport-support.txt'), 'utf8');
+    assert.match(rep, /DERNIERE-LIGNE-DU-PONT https:\/\/hote-\w{5}\/…/);
+    assert.ok(!/CLE-SECRETE-42|addon\.example|Clement/.test(rep), 'clé dans le chemin d\'une URL d\'addon, hôte ou nom du compte Windows en clair dans le rapport');
+  });
   test('port : 4477 par défaut, config.json le change, la variable PORT l\'emporte ; "dev": true active le mode développeur', () => {
     const lib = path.join(__dirname, '..', '..', 'bridge', 'lib.js'), d = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-'));
     const get = (env, cfgJson) => { if (cfgJson) fs.writeFileSync(path.join(d, 'config.json'), JSON.stringify(cfgJson)); const e = { ...process.env, BRIDGE_DATA_DIR: d, ...env }; if (!('PORT' in env)) delete e.PORT; delete e.BRIDGE_DEV; delete e.DEBUG;

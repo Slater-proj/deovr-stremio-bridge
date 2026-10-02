@@ -27,7 +27,9 @@ let txt = [
 ].join('\n');
 // masquage : email, hôtes distants remplacés par un identifiant stable (on distingue les hôtes sans les révéler)
 if (L.cfg.email) txt = txt.split(L.cfg.email).join('***@***');
-txt = txt.replace(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi, (m, h) => `${m.startsWith('https') ? 'https' : 'http'}://hote-${crypto.createHash('sha1').update(h).digest('hex').slice(0, 5)}`);
+// URL distante : hôte ET chemin masqués (le chemin d'une URL d'addon peut contenir une clé, ex. /realdebrid=CLE/manifest.json) ; les adresses locales (127.0.0.1, IP) restent lisibles
+txt = txt.replace(/(https?):\/\/([a-z0-9.-]+\.[a-z]{2,})(:\d+)?(\/[^\s"'<>\\)]*)?/gi, (m, s, h, p, rest) => `${s.toLowerCase()}://hote-${crypto.createHash('sha1').update(h.toLowerCase()).digest('hex').slice(0, 5)}${rest && rest.length > 1 ? '/…' : ''}`);
+txt = txt.replace(/([A-Za-z]:(?:\\\\|\\)Users(?:\\\\|\\))[^\\"\s]+/g, '$1<utilisateur>');   // nom du compte Windows dans les chemins
 txt = txt.replace(/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(pw|club|io|fun|com|net|org|tv|xyz)\b/gi, m => 'hote-' + crypto.createHash('sha1').update(m).digest('hex').slice(0, 5));
 fs.writeFileSync(path.join(dir, 'rapport-support.txt'), txt);
 console.log(`rapport-support.txt écrit (${Math.round(txt.length / 1024)} Ko) : ${path.join(dir, 'rapport-support.txt')}\nEnvoie-moi ce fichier.`);

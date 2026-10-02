@@ -30,7 +30,7 @@ PAGES UTILES (adresse du pont + chemin ; surtout avec --dev)
   /debug/labo        banc de test casque : verdict par scene (flux avale ou recommence)
   /t                 test des liens deovr:// (a taper en entier dans DeoVR)
 
-BANC DE TEST CASQUE (onglet "Test pont" dans DeoVR : "Labo 1" a "Labo 12", generes au demarrage)
+BANC DE TEST CASQUE (onglet "Test pont" dans DeoVR : "Labo 1" a "Labo 16", generes au demarrage)
   Chaque Labo est une petite video synthetique qui repond a UNE question (H.264 ou HEVC, HLS en TS ou en fMP4,
   bascule chargement -> film, repli "fiche demandee comme flux", fiche sans format declare, format dans le nom du fichier, MKV direct). Pour chacun, notez : l'image apparait-elle ? devant vous ?
   le texte est-il net ? DeoVR propose-t-il le choix du mode VR ? Puis lancez utility\RAPPORT-SUPPORT.bat : le rapport

@@ -6,7 +6,7 @@
   "catalogExclude": "",
   "genreTabs": false,
   "maxTabs": 20,
-  "itemsPerTab": 100,
+  "itemsPerTab": 150,
   "vrOnly": true,
   "authorized": "0",
   "forceProxy": false,

@@ -50,14 +50,14 @@ Tout est dans le dossier de l'exe : `config.json` (réglages, à éditer), `data
 
 ## 3. Version Node.js
 
-1. Décompressez `deovr-stremio-bridge-vX.Y.Z.zip`.
+1. Fabriquez le zip avec `npm run build` (il n'est plus publié dans les releases) et décompressez `dist/deovr-stremio-bridge-vX.Y.Z.zip`, ou lancez directement `node bridge/server.js` depuis le dépôt.
 2. Double-clic sur **`INSTALL.bat`** : installe Node.js 20+ et ffmpeg avec *winget* s'ils manquent (fermez puis relancez après l'installation de Node), propose le diagnostic.
 3. Lancez Stremio, puis **`start.bat`** : la fenêtre affiche les adresses ; si le pont s'arrête, il est relancé après 5 s. Au premier lancement le navigateur s'ouvre sur la page de connexion.
 4. Dans DeoVR : `http://localhost:4477`.
 
 ## 4. Casque autonome (Quest sans PC…)
 
-`localhost` ne fonctionne que pour DeoVR sur le même PC. Pour un autre appareil : utilisez l'adresse IP du PC affichée au démarrage, lancez une fois `utility\PARE-FEU.bat` (zip debug) en administrateur, ou autorisez l'exe dans le pare-feu Windows, (ouvre le port en réseau privé), et mettez `"platform": "quest"` dans `config.json` si vous voulez que MKV/AV1/VP9 soient proposés directement. Le chemin « casque autonome » n'est pas couvert par les tests : les retours sont bienvenus.
+`localhost` ne fonctionne que pour DeoVR sur le même PC. Pour un autre appareil : utilisez l'adresse IP du PC affichée au démarrage, lancez une fois `utility\PARE-FEU.bat` (zip debug) en administrateur (ouvre le port en réseau privé), ou autorisez l'exe dans le pare-feu Windows, et mettez `"platform": "quest"` dans `config.json` si vous voulez que MKV/AV1/VP9 soient proposés directement. Le chemin « casque autonome » n'est pas couvert par les tests : les retours sont bienvenus.
 
 Pour n'autoriser que le PC local (plus sûr), mettez `"bindHost": "127.0.0.1"`. La page de connexion `/setup` n'est de toute façon accessible que depuis le PC lui-même.
 

@@ -50,7 +50,7 @@ if (has('--report') || has('--diagnose')) {
 const cfgState = isSea && !process.env.BRIDGE_CONFIG ? require('./settings').ensure(require('./paths').resolve().configFile) : 'existe';   // exe : crée config.json à côté de lui s'il n'existe pas (avant la lecture des réglages)
 const L = require('./lib'), { start, cfg, log, selfCheck } = L;
 const fs = require('fs');
-start().then(() => {
+start().then(async () => {
   const nets = Object.values(require('os').networkInterfaces()).flat().filter(n => n.family === 'IPv4' && !n.internal);
   const b = L.VERSION_INFO.build;
   log('info', `===== DeoVR-Stremio Bridge ${L.VERSION_FULL}${b && b.commit ? ' (build ' + String(b.commit).slice(0, 7) + ')' : ''}${cfg.dev ? '  — MODE DÉVELOPPEUR' : ''} =====`);
@@ -65,8 +65,9 @@ start().then(() => {
   log('info', `Test des liens deovr:// : http://localhost:${cfg.port}/t  |  Suivi : /status  |  États : /debug/downloads  |  Journaux : data\\bridge-debug.log`);
   if (cfg.dev) log('info', `Mode développeur : tous les points d'observation sur http://localhost:${cfg.port}/dev ; ffmpeg détaillé dans le journal.`);
   if (L.cfg.ffmpeg === 'ffmpeg') log('info', 'ffmpeg : celui du PATH (aucun ffmpeg fourni à côté de l\'application).');
+  const st = await L.auth.check();   // lit la clé une fois : un secrets.dat illisible (dossier copié d'un autre PC) compte comme « non connecté »
   selfCheck();
-  const setupUrl = `http://localhost:${cfg.port}/setup`, st = L.auth.status();
+  const setupUrl = `http://localhost:${cfg.port}/setup`;
   if (has('--login') || (!st.connecte && !has('--no-browser'))) {
     log('info', `Connexion à Stremio : ouverture de ${setupUrl} dans votre navigateur (si rien ne s'ouvre, copiez cette adresse).`); openUrl(setupUrl);
   }

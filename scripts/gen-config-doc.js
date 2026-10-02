@@ -11,23 +11,25 @@ const EXTRA = {   // clés sans commentaire dans lib.js
   genreTabs: 'un onglet par genre pour les catalogues qui en proposent', maxTabs: 'nombre maximum d\'onglets dans DeoVR', itemsPerTab: 'films par onglet', types: 'types Stremio affichés', cacheMinutes: 'durée de mémorisation des catalogues (minutes)',
   remux: 'autorise la conversion avec ffmpeg (MKV, écran de chargement, vignettes) ; false = lecture directe uniquement',
   debug: 'journaux détaillés (aussi : variable d\'environnement DEBUG=1)' };
-const DEF = { port: '4477', email: '""', password: '""', authKey: '""', localStremio: '"http://127.0.0.1:11470"', localStremioPublic: '"" (automatique)', debug: 'false', bindHost: '"0.0.0.0"' };
+const DEF = { port: '4477', email: '""', password: '""', authKey: '""', localStremio: '"http://127.0.0.1:11470"', localStremioPublic: '"" (automatique)', debug: 'false', bindHost: '"0.0.0.0"',   // valeurs lisibles quand l'expression du code ne l'est pas
+  torrentStartMs: '120000', platform: '"windows"', ffmpeg: 'ffmpeg fourni avec l\'exe, sinon celui du PATH', formatMenu: '"auto"', startMode: '"rapide"', loaderTextScale: '1', dnsMode: '"auto"', dev: 'false', stremioApi: '"https://api.strem.io"', tempDir: '<dossier de données>/tmp' };
+EXTRA.publicDns = 'DNS publics utilisés en secours (dnsMode « auto ») ou en premier (« public »)';
 const rows = [];
 for (const line of block.split('\n')) {
   const m = /^  (\w+):\s*(.*?),?\s+(?:\/\/\s*(.*))?$|^  (\w+):\s*(.*?),?\s*$/.exec(line); if (!m) continue;
   const key = m[1] || m[4], expr = m[2] ?? m[5], comment = m[3] || EXTRA[key] || '';
   const def = /(?:\?\?|\|\|)\s*(.+?)\s*$/.exec(expr.replace(/,\s*$/, '')); let d = def ? def[1] : expr;
-  if (/^(env\.|file\.)/.test(d)) d = DEF[key] || '—';
+  if (DEF[key]) d = DEF[key]; else if (/^(env\.|file\.)/.test(d)) d = '—';
   d = d.replace(/'\)$/, "'").replace(/\|/g, '\\|').replace(/\[.*\]/, m2 => m2.length > 40 ? '[…]' : m2);
   rows.push(`| \`${key}\` | \`${d}\` | ${(comment || '').replace(/\|/g, '\\|')} |`);
 }
 const out = `<!-- Fichier généré par scripts/gen-config-doc.js : ne pas modifier à la main (modifier les commentaires de bridge/lib.js puis \`npm run docs\`). -->
 # Configuration (\`config.json\`)
 
-Copiez \`config.example.json\` en \`config.json\` (le script \`INSTALL.bat\` le fait pour vous) et ne gardez que les clés que vous voulez changer.
-Les valeurs par défaut conviennent à la plupart des installations. \`config.json\` contient vos identifiants Stremio : **ne le partagez jamais** (il est exclu du dépôt et des archives).
+\`config.json\` est créé au premier lancement (à côté de l'exe ; dans le dossier du code pour la variante Node) avec les réglages courants. Ajoutez-y seulement les clés que vous voulez changer, puis relancez le pont.
+Les valeurs par défaut conviennent à la plupart des installations. \`config.json\` ne contient **aucun identifiant** : la connexion Stremio passe par la page \`/setup\` (voir [SECURITY.md](../SECURITY.md)).
 
-Certaines clés peuvent aussi venir de variables d'environnement : \`PORT\`, \`STREMIO_EMAIL\`, \`STREMIO_PASSWORD\`, \`STREMIO_AUTHKEY\`, \`LOCAL_STREMIO\`, \`ADDON_URLS\`, \`SCRAPE_TRACKERS\`, \`DNS_MODE\`, \`DEOVR_PLATFORM\`, \`FFMPEG\`, \`LOCAL_DIRS\`, \`DEBUG\`, \`BRIDGE_DATA_DIR\` (dossier des journaux/état/config).
+Certaines clés peuvent aussi venir de variables d'environnement : \`PORT\`, \`BIND_HOST\`, \`STREMIO_AUTHKEY\`, \`LOCAL_STREMIO\`, \`LOCAL_STREMIO_PUBLIC\`, \`ADDON_URLS\`, \`SCRAPE_TRACKERS\`, \`DNS_MODE\`, \`DEOVR_PLATFORM\`, \`FFMPEG\`, \`LOCAL_DIRS\`, \`TORRENT_START_MS\`, \`STREMIO_API\`, \`DEBUG\`, \`BRIDGE_DEV\`, \`BRIDGE_TMP\` (fichiers temporaires), \`BRIDGE_DATA_DIR\` (dossier des journaux/état/config), \`BRIDGE_CONFIG\` (fichier de réglages). Anciennes : \`STREMIO_EMAIL\`, \`STREMIO_PASSWORD\`.
 
 | Clé | Valeur par défaut | Rôle |
 |---|---|---|
