@@ -30,12 +30,12 @@ PAGES UTILES (adresse du pont + chemin ; surtout avec --dev)
   /debug/labo        banc de test casque : verdict par scene (flux avale ou recommence)
   /t                 test des liens deovr:// (a taper en entier dans DeoVR)
 
-BANC DE TEST CASQUE (onglet "Test pont" dans DeoVR : "Labo 1" a "Labo 6", generes au demarrage)
+BANC DE TEST CASQUE (onglet "Test pont" dans DeoVR : "Labo 1" a "Labo 9", generes au demarrage)
   Chaque Labo est une petite video synthetique qui repond a UNE question (H.264 ou HEVC, HLS en TS ou en fMP4,
-  bascule chargement -> film, description par "path"). Pour chacun, notez : l'image apparait-elle ? devant vous ?
+  bascule chargement -> film, repli "fiche demandee comme flux", fiche sans format declare, format dans le nom du fichier, MKV direct). Pour chacun, notez : l'image apparait-elle ? devant vous ?
   le texte est-il net ? DeoVR propose-t-il le choix du mode VR ? Puis lancez utility\RAPPORT-SUPPORT.bat : le rapport
   contient /debug/labo (ce que le lecteur a reellement demande : "OK probable" ou "ECHEC probable : flux recommence").
-  Aide-memoire : un flux que DeoVR recommence exactement 15 s apres son debut = il n'arrive pas a le demarrer.
+  Aide-memoire : un flux que DeoVR recommence moins de 30 s apres son debut = il n'arrive pas a le demarrer (un nouvel essai minutes plus tard n'est pas un echec).
 
 TESTS A FAIRE SUR LE CASQUE (onglet "Test pont" dans DeoVR)
   - Test 5 puis Test 6 (30 s entre les deux) : ecran de chargement ~12 s puis la video demarre seule.

@@ -44,6 +44,7 @@
   "loadingScreen": "always",
   "loadingCodec": "h264",
   "holdMinutes": 30,
+  "coursSlots": 6,
   "maxDownloads": 3,
   "minBufferSec": 20,
   "firstWaitMs": 0,

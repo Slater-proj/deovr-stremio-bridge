@@ -4,6 +4,14 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Corrigé (2e test au casque du 02/10)
+- **Écran de chargement et Labos lisibles en VR** : le texte tenait sur tout le dôme 180° (lignes de 64 caractères) donc « étiré » et trop grand. Désormais lignes de 30 caractères maximum, bloc centré (≈ 35 % de la largeur d'un œil), barre plus courte ; les écrans plats gardent la mise en page large.
+- **Faux avertissement « le lecteur recommence le flux »** : la première demande du segment 0 du film est la bascule normale (elle comptait comme un redémarrage). Seules les demandes suivantes comptent ; le bilan n'écrit plus « MAIS redémarré » à tort.
+- **Débit nécessaire inconnu (MKV sans débit annoncé)** : la durée est lue séparément et le débit calculé par taille / durée. Avant, le tampon restait à 20 s pour un film 8K à 0,6 Mo/s (Naruto) ; il tient maintenant compte du débit réel.
+- **Banc de test** : `init.mp4` / `b_init.mp4` introuvables sous Windows (Labos 3 et 5 invalides) → ffmpeg tourne dans le dossier de sortie avec des noms relatifs et les fichiers sont vérifiés ; verdict : un redémarrage = flux redemandé en moins de 30 s (un nouvel essai minutes plus tard n'est plus un « ÉCHEC » : Labo 1 était un faux négatif) ; texte plus court et plus petit ; compteur lisible.
+- **Repli « fiche demandée comme flux »** : DeoVR a donné une fois l'adresse de la fiche d'un film au lecteur vidéo (« format non pris en charge »). Si c'est NSPlayer qui réclame une fiche, le pont le redirige (302) vers le vrai flux. Non vérifié au casque : le Labo 6 sert à le confirmer.
+- **« En cours » : emplacements fixes** (`coursSlots`, 6 par défaut) : DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste. Chaque emplacement pointe vers `/video/slot/<n>.json`, résolu au moment de la lecture, et l'état (`[EN COURS 40 %]`, `[PRÊT]`…) est dans le titre de la fiche. À confirmer au casque : que DeoVR remplace bien le titre de la liste par celui de la fiche.
+
 ### Corrigé (test au casque du 02/10)
 - **Écran de chargement toujours en H.264** (avant : HEVC pour les films 6K+). Les journaux montrent que le lecteur de DeoVR relance le flux depuis le début **exactement 15 s** après son démarrage quand il est en HEVC, alors qu'un écran de chargement en H.264 tourne sans problème. Même cause pour les films HEVC 8K envoyés en HLS (dont le film « prêt » qui chargeait à l'infini).
 - **Films non H.264 (HEVC…)** : l'écran de chargement s'affiche tout de suite, pendant la mise en tampon ; quand le film est prêt il indique « PRÊT, appuyez sur RETOUR puis relancez le film » (le HEVC n'est plus jamais mis dans le flux HLS) ; au clic suivant la fiche propose le fichier direct (lecture immédiate, mode VR habituel). Option `hevcDirect` (vrai par défaut).
@@ -14,7 +22,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 - Journaux et bilans : détection d'un lecteur qui redémarre le flux (`ouvertures_du_flux_a_s`).
 
 ### Ajouté
-- **Banc de test casque** (onglet *Test pont* : Labo 1 à 6, générés au démarrage par ffmpeg, aucune dépendance) : H.264/HEVC × HLS TS/fMP4 × MP4 direct, bascule chargement → film HEVC, déclaration par `path` ; verdict automatique dans `/debug/labo` et dans le rapport d'assistance.
+- **Banc de test casque** (onglet *Test pont* : Labo 1 à 9, générés au démarrage par ffmpeg, aucune dépendance) : H.264/HEVC × HLS TS/fMP4 × MP4 × MKV direct, bascule chargement → film HEVC, repli « fiche demandée comme flux », fiche sans format déclaré et format dans le nom du fichier (pourquoi le sélecteur FLAT/180/360 manque-t-il ?) ; verdict automatique dans `/debug/labo` et dans le rapport d'assistance.
 - Fiche « Mode d'emploi » dans l'onglet *Test pont* : où trouver le menu latéral et la recherche (`/ui`, `/s/mot`), absents de la liste native de DeoVR.
 - **Exe portable** `DeoVR-Stremio-Bridge.exe` (Node.js embarqué, *Single Executable Application*) dans un zip avec ffmpeg, aucune installation. Fabriqué et testé par la CI Windows ; publié avec chaque release et dans la pré-release `dev-build`.
 - **Tout au même endroit** : `config.json` (réglages) à côté de l'exe, créé au premier lancement ; clé, journaux, état et fichiers temporaires dans `data\` (`%APPDATA%` seulement si ce dossier est en lecture seule ; `--data-dir` / `BRIDGE_DATA_DIR` pour choisir).

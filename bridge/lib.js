@@ -55,6 +55,7 @@ const cfg = {
   testScene: file.testScene ?? true,              // onglet « Test » avec de petites vidéos embarquées
   extraTrackers: file.extraTrackers || [],        // trackers ajoutés à TOUS les torrents (en plus de ceux de l'addon et des trackers publics)
   holdMinutes: file.holdMinutes ?? 30,             // un film lancé reste actif (téléchargement continu) ce temps après la dernière activité du lecteur
+  coursSlots: file.coursSlots ?? 6,                // onglet « En cours » : nombre d'emplacements fixes (DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste)
   maxDownloads: file.maxDownloads ?? 3,            // films téléchargés en même temps (le plus ancien est mis en pause au-delà)
   minBufferSec: file.minBufferSec ?? 20,           // tampon minimum (secondes de film converties) avant de passer de l'écran de chargement au film
   maxAheadMin: file.maxAheadMin ?? 30,             // ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur
@@ -564,11 +565,24 @@ async function localThumb(req, res, id) {
   return fs.existsSync(out) ? serveLocal(req, res, out, 'image/jpeg') : fallback();
 }
 // ---------- Onglets « intelligents » (aucun n'est basé sur une mesure qui télécharge) ----------
-function dlScene(base) {   // « En cours » : les films lancés par un clic (actifs ou en pause), avec leur état
-  const list = dlSorted().map(D => ({ title: '[' + dlState(D).label + '] ' + D.title, videoLength: D.runtime || 0, thumbnailUrl: thumbUrl(base, D.poster || ''), video_url: `${base}/video/${D.type || 'movie'}/${encodeURIComponent(D.id)}.json` }));
+const slotKeys = [];   // emplacement n -> clé "hash:idx" du film : un film garde le même emplacement tant qu'il est dans le registre
+function slotSync() {
+  const n = Math.max(1, cfg.coursSlots | 0);
+  slotKeys.length = n; for (let i = 0; i < n; i++) if (!slotKeys[i] || !dls.has(slotKeys[i])) slotKeys[i] = null;
+  for (const D of [...dls.values()].sort((x, y) => (y.active - x.active) || (y.lastPlayer - x.lastPlayer))) {
+    if (slotKeys.includes(D.key)) continue;
+    let i = slotKeys.indexOf(null);
+    if (i < 0) { const c = slotKeys.map((k, j) => ({ j, D: dls.get(k) })).filter(x => x.D && !x.D.active).sort((x, y) => x.D.lastPlayer - y.D.lastPlayer)[0]; if (!c) break; i = c.j; }   // plus d'emplacement libre : le film en pause le plus ancien cède sa place
+    slotKeys[i] = D.key;
+  }
+  return slotKeys;
+}
+function dlScene(base) {   // « En cours » : emplacements FIXES (la liste ne change pas de forme, donc DeoVR n'a pas besoin de la redemander) ; chaque emplacement pointe vers /video/slot/<n>.json, résolu au moment où DeoVR lit la fiche
+  const list = slotSync().map((k, i) => { const D = k && dls.get(k); return D
+    ? { title: '[' + dlState(D).label + '] ' + D.title, videoLength: D.runtime || 0, thumbnailUrl: thumbUrl(base, D.poster || ''), video_url: `${base}/video/slot/${i + 1}.json` }
+    : { title: `Emplacement ${i + 1} · libre (lancez un film)`, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/slot/${i + 1}.json` }; });
   if (loginNeeded) list.unshift({ title: `ATTENTION · Connexion Stremio requise : sur le PC, ouvrez http://localhost:${cfg.port}/setup`, videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/empty.json` });
   if (stremioDown) list.unshift({ title: 'ATTENTION · Stremio ne répond pas : lancez Stremio', videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/empty.json` });
-  if (!list.length) list.push({ title: 'Aucun film en cours : lancez un film, il apparaîtra ici', videoLength: 12, thumbnailUrl: `${base}/test/thumb.jpg`, video_url: `${base}/video/test/empty.json` });
   return { name: 'En cours', list };
 }
 const vrPool = () => [...catalogMetas.values()].filter(m => (!cfg.vrOnly || isVR(m, '')) && !isHidden(m.id));
@@ -1347,8 +1361,13 @@ function spawnReal(s) {
   proc.stderr.on('data', d => {
     const t = String(d); s.err = (s.err + t).slice(-3000);
     const vm = /Stream #0:\d+[^:]*: Video: ([^\n]+)/.exec(t); if (vm && !s.codec) { s.codec = vm[1].slice(0, 120); dlLog(D, 'info', `vrai film détecté : ${s.codec}`); }
-    const dm = /Duration: (\d+):(\d+):([\d.]+)[^\n]*?bitrate: (\d+) kb\/s/.exec(t);
-    if (dm && !s.durSec) { s.durSec = +dm[1] * 3600 + +dm[2] * 60 + +dm[3]; D.need = +dm[4] * 125; dlLog(D, 'info', `durée ${fmtDur(s.durSec)}, débit vidéo ${(+dm[4] / 1000).toFixed(1)} Mbit/s => il faut ${mbs(D.need)} pour lire sans saccade`); }
+    const dm = /Duration: (\d+):(\d+):([\d.]+)/.exec(t);   // MKV : « bitrate: N/A » est fréquent (cas Naruto : débit nécessaire inconnu -> tampon de 20 s seulement) -> repli : taille du fichier / durée
+    if (dm && !s.durSec) {
+      s.durSec = +dm[1] * 3600 + +dm[2] * 60 + +dm[3]; const bm = /bitrate: (\d+) kb\/s/.exec(t.slice(dm.index, dm.index + 240));
+      if (bm) D.need = +bm[1] * 125; else if (D.size && s.durSec > 60) D.need = Math.round(D.size / s.durSec);
+      if (!D.runtime) D.runtime = s.durSec;
+      dlLog(D, 'info', `durée ${fmtDur(s.durSec)}, débit du film ${D.need ? (D.need * 8 / 1e6).toFixed(1) + ' Mbit/s (' + (bm ? 'lu dans le fichier' : 'calculé : taille / durée') + ') => il faut ' + mbs(D.need) + ' pour lire sans saccade' : 'inconnu'}`);
+    }
     for (const line of t.split('\n')) if (/error|invalid|failed|refused|timed out|reconnect/i.test(line)) dlLog(D, 'warn', `ffmpeg : ${line.trim().slice(0, 200)}`); else if (cfg.dev && line.trim() && !/^\s*(frame|size)=/.test(line)) dlLog(D, 'debug', `ffmpeg : ${line.trim().slice(0, 200)}`);
   });
   proc.on('error', e => { s.err += e.message; dlLog(D, 'warn', `ffmpeg impossible à lancer : ${e.message}`); });
@@ -1460,13 +1479,13 @@ function loadStatus(s) {
   return { step, stepTxt, prog, problem, eta, T, got, sp, need, age };
 }
 const wrapTxt = (t, n = 64) => { const out = []; let line = ''; for (const w of String(t).split(/\s+/)) { if ((line + ' ' + w).trim().length > n) { out.push(line); line = w; } else line = (line + ' ' + w).trim(); } if (line) out.push(line); return out; };
-function liveProgressText(s, i = 0) {
-  if (s.realReady && s.direct) return ['Film PRÊT (pont DeoVR-Stremio)', String(s.D.title || '').replace(/[^\x20-\x7EÀ-ÿ]/g, '').slice(0, 60), `Tampon prêt : ${Math.round(s.producedSec || 0)} s de film déjà reçus`, 'Ce film est en HEVC : DeoVR ne peut pas l\'enchaîner ici.', 'Appuyez sur RETOUR, puis relancez le film :', 'il démarrera aussitôt (lecture directe).'];
+function liveProgressText(s, i = 0) {   // lignes COURTES (≤ 30 caractères) : en VR le texte occupe le centre de la vue, pas tout le dôme
+  const ttl = String(s.D.title || '').replace(/[^\x20-\x7EÀ-ÿ]/g, '').replace(/^\s*\[[^\]]*\]\s*/, '').slice(0, 54);
+  if (s.realReady && s.direct) return ['FILM PRÊT', ttl, '', `${Math.round(s.producedSec || 0)} s de film déjà reçus`, '', 'Film HEVC : appuyez sur RETOUR', 'puis relancez le film.', 'Il démarrera aussitôt.'];
   const D = s.D, L = loadStatus(s), el = Math.max(Math.round((Date.now() - s.loaderT0) / 1000), i * LOAD_SEG), tot = Math.round((Date.now() - (D.activatedAt || s.t0)) / 1000);
-  const lines = ['Chargement du film (pont DeoVR-Stremio)', String(D.title || '').replace(/[^\x20-\x7EÀ-ÿ]/g, '').slice(0, 60), `Étape ${L.step}/4 : ${L.stepTxt}`,
-    `Pairs : ${D.peers}   Reçu : ${(L.got / 1e6).toFixed(1)} Mo   Débit : ${mbs(L.sp)}${L.need ? '   Nécessaire : ' + mbs(L.need) : ''}`,
-    `Tampon : ${Math.round(s.producedSec || 0)} s sur ${L.T} s${L.eta != null ? '   Reste environ ' + L.eta + ' s' : ''}`];
-  if (L.problem) lines.push(...wrapTxt(L.problem)); else lines.push(`Attente : ${Math.max(el, tot)} s   (30 à 60 s est normal)`);
+  const lines = ['CHARGEMENT DU FILM', ttl, '', `Étape ${L.step}/4`, L.stepTxt, '', `Pairs ${D.peers} · Reçu ${(L.got / 1e6).toFixed(0)} Mo`, `Débit ${mbs(L.sp)}${L.need ? ' / besoin ' + mbs(L.need) : ''}`,
+    `Tampon ${Math.round(s.producedSec || 0)} s sur ${L.T} s${L.eta != null ? ' · reste ~' + L.eta + ' s' : ''}`, ''];
+  if (L.problem) lines.push(...wrapTxt(L.problem, 30)); else lines.push(`Attente ${Math.max(el, tot)} s (30 à 60 s : normal)`);
   return lines;
 }
 function renderLoader(s, i) {   // un segment de 4 s (image fixe + barre de progression + texte), dans la disposition du film
@@ -1475,12 +1494,12 @@ function renderLoader(s, i) {   // un segment de 4 s (image fixe + barre de prog
   const out = path.join(s.dir, `w${rk}.ts`);
   const p = (async () => {
     const g = liveGeom(s.D.screen, s.D.stereo);
-    const txtFile = path.join(s.dir, `w${rk}.txt`); fs.writeFileSync(txtFile, (s.fake ? s.fake.lines(s, i) : liveProgressText(s, i)).join('\n'), 'utf8');
-    const vr = s.D.screen && s.D.screen !== 'flat';
-    const W = g.eyeW, H = g.eyeH, bw = Math.round(W * (vr ? 0.4 : 0.6)), bx = Math.round((W - bw) / 2), by = Math.round(H * (vr ? 0.8 : 0.84)), fill = Math.max(4, Math.round(bw * (s.fake ? s.fake.prog(s, i) : loadStatus(s).prog)));
-    const fs0 = Math.round(H / (vr ? 52 : 28));
+    const txtFile = path.join(s.dir, `w${rk}.txt`); const vr = !!((s.D.screen && s.D.screen !== 'flat') || g.stack);   // VR = écran non plat OU disposition 2 yeux
+    fs.writeFileSync(txtFile, (s.fake ? s.fake.lines(s, i) : liveProgressText(s, i)).flatMap(l => l.length > (vr ? 30 : 64) ? wrapTxt(l, vr ? 30 : 64) : [l]).join('\n'), 'utf8');
+    const W = g.eyeW, H = g.eyeH, bw = Math.round(W * (vr ? 0.3 : 0.6)), bx = Math.round((W - bw) / 2), by = Math.round(H * (vr ? 0.84 : 0.84)), fill = Math.max(4, Math.round(bw * (s.fake ? s.fake.prog(s, i) : loadStatus(s).prog)));
+    const fs0 = Math.round(H / (vr ? 44 : 28));   // VR : bloc centré d'environ 35 % de la largeur d'un œil (un dôme de 180° étire tout ce qui est large)
     let eye = `drawbox=x=${bx}:y=${by}:w=${bw}:h=${Math.round(H / 40)}:color=0x334455:t=fill,drawbox=x=${bx}:y=${by}:w=${fill}:h=${Math.round(H / 40)}:color=0x33cc77:t=fill`;
-    if (FONT) eye += `,drawtext=fontfile='${escF(FONT)}':textfile='${escF(txtFile)}':expansion=none:fontcolor=white:fontsize=${fs0}:line_spacing=${Math.round(fs0 / 2)}:x=(w-text_w)/2:y=h*0.2`;
+    if (FONT) eye += `,drawtext=fontfile='${escF(FONT)}':textfile='${escF(txtFile)}':expansion=none:fontcolor=white:fontsize=${fs0}:line_spacing=${Math.round(fs0 / 3)}:x=(w-text_w)/2:y=h*${vr ? 0.22 : 0.2}`;
     const vf = g.stack === 'h' ? `[0:v]${eye},split[a][b];[a][b]hstack[v]` : g.stack === 'v' ? `[0:v]${eye},split[a][b];[a][b]vstack[v]` : `[0:v]${eye}[v]`;
     const useHevc = cfg.loadingCodec === 'hevc' && hevcEnc;
     const venc = useHevc && hevcEnc ? (hevcEnc === 'libx265' ? ['-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'log-level=error:keyint=20'] : ['-c:v', 'hevc_nvenc', '-g', '20']) : ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-g', '20'];
@@ -1566,7 +1585,7 @@ async function serveSwitchTest(req, res, kind, file) {
 // le lecteur DeoVR redemande le tout premier segment : il recommence le flux depuis le début (échec de démarrage/décodage, ou nouvel essai)
 function noteReopen(D, e, what) {
   e.opens = e.opens || []; const t = Math.round((Date.now() - e.t0) / 1000); e.opens.push(t);
-  if (e.opens.length > 1) dlLog(D, 'warn', `+${t} s le lecteur DeoVR recommence le flux (${what}) depuis le début : ouverture n°${e.opens.length} — il n'a pas réussi à le démarrer (codec/débit trop lourd pour son décodeur ?)`);
+  if (e.opens.length > 1) dlLog(D, 'warn', `+${t} s le lecteur DeoVR recommence le flux (${what}) depuis le début : ouverture n°${e.opens.length} — soit vous avez quitté puis relancé le film, soit le lecteur n'a pas réussi à le démarrer (codec/débit trop lourd ?)`);
 }
 async function serveLive(req, res, hash, idx, file) {
   if (req.method === 'HEAD') { res.writeHead(200, { 'content-type': file.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t', 'cache-control': 'no-cache', 'access-control-allow-origin': '*' }); return res.end(); }   // une simple sonde HEAD ne démarre rien : le téléchargement commence au premier GET (le vrai clic)
@@ -1590,7 +1609,7 @@ async function serveLive(req, res, hash, idx, file) {
     const f = path.join(s.dir, 'real', m[1]);
     if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
     if (req.method === 'GET') {
-      if (/^seg0*0\.ts$/.test(m[1])) noteReopen(D, e, 'film');
+      if (/^seg0*0\.ts$/.test(m[1])) { if (e.filmSeg0) noteReopen(D, e, 'film'); e.filmSeg0 = true; }   // la 1re demande du segment 0 du film EST la bascule (normale) : seules les suivantes sont des redémarrages
       e.realSegs++; if (!e.switched) { e.switched = true; first('real1', `premier segment du VRAI FILM demandé -> la bascule a fonctionné (${e.loaderSegs} segment(s) de chargement vus avant)`); }
       const k = s.realSegs.findIndex(x => x[0] === m[1]); if (k >= 0) s.playerSec = Math.max(s.playerSec, s.realSegs.slice(0, k + 1).reduce((a, x) => a + x[1], 0));
     }
@@ -1810,6 +1829,14 @@ function noteOpen(via, what, req) {
 }
 
 // ---------- Observabilité ----------
+// DeoVR (constaté le 02/10 sur un film) donne parfois l'adresse de la FICHE au lecteur vidéo comme si c'était le flux : « format non pris en charge ».
+// Repli : si c'est le lecteur (NSPlayer) qui demande une fiche, on le redirige vers le flux qu'elle décrit.
+function mediaAsksJson(req, res, v, what) {
+  if (!/NSPlayer|WMFSDK/i.test(String(req.headers['user-agent'] || ''))) return false;
+  const t = v && (v.path || (v.encodings && v.encodings[0] && v.encodings[0].videoSources && v.encodings[0].videoSources[0] && v.encodings[0].videoSources[0].url)); if (!t) return false;
+  log('warn', `le lecteur vidéo de DeoVR a demandé la fiche « ${String(what).slice(0, 50)} » comme si c'était le film (bug connu de DeoVR) : redirigé vers le flux (repli, à confirmer dans le casque)`);
+  res.writeHead(302, { location: t, 'cache-control': 'no-store', 'access-control-allow-origin': '*' }); res.end(); return true;
+}
 const vidHits = [];
 function notePrefetch() {   // DeoVR demande la fiche de TOUS les films d'une liste au chargement
   const n = Date.now(); vidHits.push(n); while (vidHits.length && n - vidHits[0] > 10000) vidHits.shift();
@@ -1890,8 +1917,10 @@ function start(port = cfg.port) {
       const lbf = u.pathname.match(/^\/lab\/([\w-]+)\/([\w.-]+)$/);
       if (lbf) return lab().handle(req, res, lbf[1], lbf[2]);
       if (u.pathname === '/debug/labo') return send(res, 200, lab().data());
+      const sl = u.pathname.match(/^\/video\/slot\/(\d+)(\.json)?$/);   // emplacement de l'onglet « En cours » -> le film qui l'occupe à cet instant
+      if (sl) { const D = dls.get(slotSync()[+sl[1] - 1]); if (!D) { const v = testVideo('empty', base); return send(res, 200, v); } u.pathname = `/video/${D.type || 'movie'}/${encodeURIComponent(D.id)}.json`; }
       const lbv = u.pathname.match(/^\/video\/lab\/([\w-]+?)(\.json)?$/);
-      if (lbv) { const v = lab().video(lbv[1], base); return v ? send(res, 200, v) : send(res, 404, { error: 'scène inconnue' }); }
+      if (lbv) { const v = lab().video(lbv[1], base); if (!v) return send(res, 404, { error: 'scène inconnue' }); if (mediaAsksJson(req, res, v, 'banc de test ' + lbv[1])) return; return send(res, 200, v); }
       const tv = u.pathname.match(/^\/video\/test\/([\w-]+?)(\.json)?$/);
       if (tv) { noteOpen(u.searchParams.get('via'), 'fiche JSON de test', req); const v = testVideo(tv[1], base); return v ? send(res, 200, v) : send(res, 404, { error: 'test inconnu' }); }
       if (u.pathname === '/catalogs') return send(res, 200, await catalogList());
@@ -1927,7 +1956,9 @@ function start(port = cfg.port) {
         if (v === 'late') { perfCount.late++; work.catch(() => {}); log('warn', `fiche ${mid} pas prête en ${cfg.jsonDeadlineMs / 1000} s (addons lents) : réponse 503, elle sera prête au prochain affichage`); return send(res, 503, { error: 'fiche en préparation, rouvrez la liste dans quelques secondes' }); }
         if (!v) perfCount.noStream++; else perfCount.ok++;
         if (!v) return send(res, 404, { error: 'aucun flux lisible trouvé' });
-        return send(res, 200, v._meta ? { ...v, title: healthTag(v._meta) + v._name } : v);   // le titre de la fiche porte la MÊME pastille que la liste
+        if (mediaAsksJson(req, res, v, v._name || mid)) return;
+        const Dx = [...dls.values()].find(x => x.id === mid);   // film déjà lancé : l'état (EN COURS 40 %, PRÊT...) est dans le titre, DeoVR remplace le titre de la liste par celui de la fiche à chaque affichage
+        return send(res, 200, v._meta ? { ...v, title: Dx ? '[' + dlState(Dx).label + '] ' + v._name : healthTag(v._meta) + v._name } : v);   // sinon : la MÊME pastille que la liste
       }
       if (u.pathname === '/debug') return send(res, 200, { version: VERSION_FULL, compte: auth.status(), chemins: { donnees: DATA_DIR, application: APP_DIR, reglages: PATHS.configFile, ressources: RES_DIR, temporaire: cfg.tempDir, mode: PATHS.mode, exe: PATHS.sea }, config: { ...cfg, email: cfg.email ? cfg.email.replace(/^(.).*(@.*)$/, '$1***$2') : '', password: cfg.password ? '***' : '', authKey: cfg.authKey ? '***' : '', addonUrls: cfg.addonUrls.map(redact) }, log: logBuf.slice(-100) });
       const d = u.pathname.match(/^\/debug\/video\/([^/]+)\/(.+)$/);

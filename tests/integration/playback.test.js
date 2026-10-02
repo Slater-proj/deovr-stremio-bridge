@@ -27,6 +27,18 @@ describe('lecture : clic -> écran de chargement -> film', { skip: !HAS_FFMPEG &
     const lib = await bridge.json('/deovr'), enCours = lib.scenes[0];
     assert.equal(enCours.name, 'En cours'); assert.match(enCours.list[0].title, /^\[(PRÊT|EN COURS)/);
     const d = (await downloads(bridge))[0]; assert.equal(d.actif, true); assert.ok(d.chronologie.some(l => /CLIC n°1/.test(l)));
+    // emplacement fixe : même film, fiche résolue à la lecture, l'état est dans le titre
+    assert.match(enCours.list[0].video_url, /\/video\/slot\/1\.json$/);
+    const sv = await bridge.json(new URL(enCours.list[0].video_url).pathname);
+    assert.match(sv.title, /^\[(PRÊT|EN COURS)[^\]]*\] Film 1 /); assert.equal(sv.encodings[0].videoSources[0].url.includes('/live/'), true);
+    assert.match(enCours.list[1].title, /Emplacement 2 · libre/, 'les autres emplacements restent libres');
+  });
+
+  test('repli : si le LECTEUR (NSPlayer) réclame la fiche comme flux, il est redirigé vers le flux ; un navigateur reçoit la fiche', async () => {
+    const lib = await bridge.json('/deovr'), path1 = new URL(lib.scenes[0].list[0].video_url).pathname;
+    const r = await bridge.get(path1, { redirect: 'manual', headers: { 'user-agent': 'NSPlayer/12.00.26100.9549 WMFSDK/12.00.26100.9549', range: 'bytes=0-' } });
+    assert.equal(r.status, 302); assert.match(r.headers.get('location'), /\/live\/\w{40}\/0\/index\.m3u8$/);
+    const b = await bridge.get(path1, { headers: { 'user-agent': 'Mozilla/5.0 Chromium/40 HMD/0' } }); assert.equal(b.status, 200); assert.ok((await b.json()).encodings);
   });
 
   test('HEAD ne démarre rien', async () => {

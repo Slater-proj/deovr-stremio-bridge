@@ -21,7 +21,7 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 
 | Onglet | Contenu |
 |---|---|
-| **En cours** | les films que vous avez lancés (actifs ou en pause), toujours en premier |
+| **En cours** | 6 emplacements fixes : les films que vous avez lancés (actifs ou en pause) y prennent place, l'état est dans le titre (`[EN COURS 40 %]`, `[PRÊT]`). DeoVR ne redemande la bibliothèque qu'en revenant sur le site ; il relit en revanche les fiches à chaque affichage de la liste |
 | **Plus de seeds** | classement d'après les seeders annoncés par les trackers (sans rien télécharger) |
 | **Nouveautés** | année de sortie la plus récente |
 | **Haute qualité (titre)** | d'après le **titre** uniquement (4K/6K/8K…), donc indicatif |

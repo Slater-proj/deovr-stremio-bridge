@@ -30,7 +30,7 @@ Pages et diagnostic :
 | `/t`, `/open/C` | page de test des liens `deovr://` |
 | `/status`, `/status.json` | films en cours |
 | `/debug/downloads` | état et chronologie de chaque clic, bilans |
-| `/lab/<scène>/<fichier>`, `/video/lab/<scène>.json`, `/debug/labo` | banc de test casque (Labo 1 à 6, mode d'emploi) : médias synthétiques, fiches, verdict « flux avalé / recommencé » par scène |
+| `/lab/<scène>/<fichier>`, `/video/lab/<scène>.json`, `/debug/labo` | banc de test casque (Labo 1 à 9, mode d'emploi) : médias synthétiques, fiches, verdict « flux avalé / recommencé » par scène |
 | `/debug/perf`, `/debug/live`, `/debug/health`, `/debug/requests`, `/debug` | performances, sessions ffmpeg, santé des films, requêtes, configuration masquée, version, état du compte et chemins |
 | `/catalogs` | catalogues Stremio vus par le pont |
 | `/setup` (`POST /setup`, `POST /setup/logout`) | connexion au compte Stremio — **depuis le PC uniquement** (loopback, `Host` local, jeton de formulaire) ; voir [SECURITY.md](../SECURITY.md) |

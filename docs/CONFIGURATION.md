@@ -50,6 +50,7 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `STRE
 | `testScene` | `true` | onglet « Test » avec de petites vidéos embarquées |
 | `extraTrackers` | `[]` | trackers ajoutés à TOUS les torrents (en plus de ceux de l'addon et des trackers publics) |
 | `holdMinutes` | `30` | un film lancé reste actif (téléchargement continu) ce temps après la dernière activité du lecteur |
+| `coursSlots` | `6` | onglet « En cours » : nombre d'emplacements fixes (DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste) |
 | `maxDownloads` | `3` | films téléchargés en même temps (le plus ancien est mis en pause au-delà) |
 | `minBufferSec` | `20` | tampon minimum (secondes de film converties) avant de passer de l'écran de chargement au film |
 | `maxAheadMin` | `30` | ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur |

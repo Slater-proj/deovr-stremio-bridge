@@ -24,10 +24,12 @@ test('/deovr : onglets dans l\'ordre (En cours d\'abord), un onglet par catalogu
   assert.equal(lib.authorized, '0');
 });
 
-test('« En cours » vide : un élément explicite, qui s\'ouvre sans erreur', async () => {
-  const lib = await library(), first = scene(lib, 'En cours').list[0];
-  assert.match(first.title, /Aucun film en cours/);
-  const v = await bridge.json(new URL(first.video_url).pathname);
+test('« En cours » vide : des emplacements fixes et libres, qui s\'ouvrent sans erreur', async () => {
+  const lib = await library(), list = scene(lib, 'En cours').list;
+  assert.equal(list.length, 6, 'emplacements fixes (coursSlots)');
+  assert.match(list[0].title, /Emplacement 1 · libre/);
+  assert.match(list[0].video_url, /\/video\/slot\/1\.json$/);
+  const v = await bridge.json(new URL(list[0].video_url).pathname);
   assert.equal(v.title, 'Aucun film en cours');
 });
 
