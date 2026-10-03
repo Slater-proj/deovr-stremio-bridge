@@ -162,3 +162,15 @@ test('bibliothèque : deux demandes /deovr rapprochées (DeoVR relancé) = une s
     const p = (await b.json('/debug/perf')).bibliotheque; assert.ok(p.servies_du_cache >= 1 && p.construites >= 1, JSON.stringify(p));
   } finally { await b.stop(); }
 });
+
+test('vidéo locale sans indice VR dans le nom : le format n\'est PAS déclaré (le menu FLAT/180/360/fisheye de DeoVR reste disponible) ; formatMenu "declare" le déclare', async () => {
+  for (const [mode, declared] of [['auto', false], ['declare', true]]) {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-local2-')); fs.mkdirSync(path.join(dataDir, 'videos'), { recursive: true });
+    fs.copyFileSync(path.join(__dirname, '..', '..', 'bridge', 'test', 'test-2d.mp4'), path.join(dataDir, 'videos', 'ma video.mp4'));
+    const b = await startBridge(mocks, { formatMenu: mode }, { dataDir });
+    try {
+      const loc = scene(await b.json('/deovr'), 'Local'), v = await b.json(new URL(loc.list[0].video_url).pathname);
+      assert.equal(v.screenType !== undefined, declared, mode + ' : ' + JSON.stringify(v).slice(0, 200));
+    } finally { await b.stop(); }
+  }
+});

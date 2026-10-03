@@ -21,6 +21,7 @@ let txt = [
   '\n===== ÉTAT EN DIRECT DU PONT =====', live,
   '\n===== BILANS PAR CLIC (lu / quitté puis repris / abandonné par DeoVR après X s / aucune donnée) =====', tail('bridge-bilans.log', 60),
   '\n===== DÉCISIONS (format VR et raison, sources proposées/écartées, 40 dernières) =====', tail('bridge-decisions.log', 40),
+  '\n===== ÉVÉNEMENTS (lecteur vidéo, sauts, relances de DeoVR, disque : à lire en premier, 300 derniers) =====', tail('bridge-events.log', 300),
   '\n===== REQUÊTES REÇUES (DeoVR et pont, 400 dernières) =====', tail('bridge-requests.log', 400),
   '\n===== JOURNAL DÉTAILLÉ (1500 dernières lignes) =====', tail('bridge-debug.log', 1500),
   '\n===== DIAGNOSTIC (résumé) =====', fs.existsSync(path.join(dir, 'diagnostic-report.txt')) ? (fs.statSync(path.join(dir, 'diagnostic-report.txt')).mtime.toISOString() + ' | ') + fs.readFileSync(path.join(dir, 'diagnostic-report.txt'), 'utf8').split('\n').filter(l => /^(===|\[(FAIL|WARN|PASS)\]|  ·|  torrent|  stats)/.test(l)).join('\n') : '(lance diagnose.bat pour l\'inclure)',

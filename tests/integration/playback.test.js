@@ -172,3 +172,24 @@ describe('mode échantillon : seulement des extraits (début, milieu, fin), lect
     } finally { await bridge.stop(); await mocks.close(); }
   });
 });
+
+describe('saut du lecteur dans une zone non reçue : refus rapide + préchargement (le lecteur gelé abandonne vers 7 s et DeoVR se relance)', () => {
+  test('503 au bout de seekGuardSec, zone préchargée, l\'essai suivant passe ; une ouverture du fichier n\'est jamais refusée', { timeout: 60000 }, async () => {
+    const film = Buffer.alloc(3e6, 7), mocks = await startMocks({ film, holeDelayMs: 6000 }), bridge = await startBridge(mocks, { seekGuardSec: 1, seekGuardMB: 0.1, seekPrefetchMB: 1 });
+    try {
+      await filmUrl(bridge, 1);   // la fiche (pas de clic)
+      const base = `${bridge.base}/torrent/${hashOf(1)}/0/video.mp4`;
+      const r0 = await fetch(base, { headers: { range: 'bytes=0-399999' } }); assert.equal(r0.status, 206);   // ouverture : lecture continue d'environ 400 Ko, comme le lecteur
+      const rd = r0.body.getReader(); let got = 0; while (got < 400000) { const { value, done } = await rd.read(); if (done) break; got += value.length; } await rd.cancel();
+      const t0 = Date.now(), r1 = await fetch(base, { headers: { range: 'bytes=2000000-' } });   // saut : la zone n'est pas reçue, le faux Stremio met 6 s
+      assert.equal(r1.status, 503, bridge.out().split('\n').filter(l => /torrent|SAUT|relais/.test(l)).slice(-8).join('\n')); assert.ok(Date.now() - t0 < 4000, `refus rapide (${Date.now() - t0} ms)`); assert.equal(r1.headers.get('retry-after'), '8');
+      assert.match(bridge.out(), /sans données en 1 s : refus rapide \(503\)/);
+      await bridge.waitFor(async () => /zone du saut préchargée/.test(bridge.out()), 20000, 300);
+      const r2 = await fetch(base, { headers: { range: 'bytes=2000000-' } }); assert.equal(r2.status, 206, 'la zone préchargée est maintenant lisible'); await r2.body.cancel();
+      assert.ok((await bridge.json('/debug/perf')).fichesVideo.seekRefuse >= 1);
+      const ev = fs.readFileSync(path.join(bridge.dataDir, 'bridge-events.log'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));   // journal d'événements : de quoi analyser un incident
+      assert.ok(ev.some(e => e.type === 'demarrage-pont' && e.reglages && e.reglages.seekGuardSec === 1 && e.ramLibre_Go > 0), 'démarrage');
+      assert.ok(ev.some(e => e.type === 'saut-refuse' && e.octet === 2000000 && e.attente_s === 1), JSON.stringify(ev.map(e => e.type)));
+    } finally { await bridge.stop(); await mocks.close(); }
+  });
+});

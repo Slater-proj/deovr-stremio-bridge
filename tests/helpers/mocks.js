@@ -8,7 +8,7 @@ const hashOf = n => crypto.createHash('sha1').update('film' + n).digest('hex');
 const behaviourOf = n => ({ 1: 'fast', 2: 'slow', 3: 'dead', 0: 'fast' })[n % 4];
 
 // slowCatalogMs : ajoute un catalogue « Lent VR » qui répond après ce délai (addon lent)
-async function startMocks({ film, poster, cacheSize = 2147483648, filmSize, fastSpeed = 8e6, slowSpeed = 1.5e5, slowCatalogMs = 0, settings = {} } = {}) {   // settings : champs en plus dans /settings du faux Stremio
+async function startMocks({ film, poster, cacheSize = 2147483648, filmSize, fastSpeed = 8e6, slowSpeed = 1.5e5, slowCatalogMs = 0, holeDelayMs = 0, settings = {} } = {}) {   // holeDelayMs : une lecture qui saute au-delà de la zone déjà lue attend ce délai avant le 1er octet (pièces à chercher chez les pairs)   // settings : champs en plus dans /settings du faux Stremio
   const SPEED = { fast: fastSpeed, slow: slowSpeed, dead: 0 };
   const SIZE = film.length, sockets = [];
   const created = new Map(), cached = new Map(), history = [];
@@ -84,7 +84,9 @@ async function startMocks({ film, poster, cacheSize = 2147483648, filmSize, fast
           r.write(film.subarray(pos, pos + n)); pos += n; if (pos > (cached.get(h) || 0)) cached.set(h, pos);
           setTimeout(tick, fast ? 0 : Math.max(1, Math.round(n / SPEED[b] * 1000)));
         };
-        tick();
+        const hole = holeDelayMs && rg && s > (cached.get(h) || 0) + 1e5;   // en-têtes tout de suite (comme Stremio), 1er octet après le délai : pièces à chercher chez les pairs
+        if (hole) r.flushHeaders();
+        setTimeout(tick, hole ? holeDelayMs : 0);
       }, wait);
       return;
     }

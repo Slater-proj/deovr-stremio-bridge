@@ -34,13 +34,27 @@ Les tests automatiques fixent `BRIDGE_LAB_PREPARE=0` : le banc de test n'est alo
 4. **Vrai film** : lancez un film avec des seeders, quittez avant la fin, rouvrez DeoVR : il doit être dans *En cours*. `utility\RAPPORT-SUPPORT.bat` (zip debug ; ou `DeoVR-Stremio-Bridge.exe --report`) pendant que le pont tourne.
 5. **Vignettes et accents** : les affiches sont-elles en paysage ? Les accents et le « · » s'affichent-ils dans les titres ?
 
+## Tests rapides après une mise à jour (10 minutes)
+
+Pont lancé par `utility\LANCER-MODE-DEV.bat`, sur un disque avec de la place. Noter l'heure de chaque geste.
+
+1. **Démarrage** : taper l'adresse du pont dans DeoVR → la liste VR s'affiche (onglets *En cours*, *Local*…).
+2. **Film déjà bien reçu** (relancé deux fois) : lecture en direct jusqu'à 5 min, puis quitter normalement. La liste VR revient-elle ?
+3. **Saut dans la partie reçue** (avant le trait d'avancement connu, voir `/status.json` → `disponible`) : instantané ?
+4. **Saut loin, dans une zone non reçue** : que fait le lecteur (figé, message d'erreur, retour à la liste) ? DeoVR se relance-t-il ? Réessayer le même saut 20 s plus tard : passe-t-il ?
+5. **Onglet *Local*** : une vidéo dont le nom n'indique pas le format (`ma video.mp4`) → le menu FLAT/180/360 est-il proposé ? Une vidéo nommée `xxx_180_LR.mp4` → image juste d'emblée ?
+6. **Mode échantillon** (`"sampleMode": true`) : un film lourd, attendre `ÉCHANTILLONS PRÊTS`, regarder le début, sauter au milieu puis à la fin.
+7. **Ne PAS cliquer de lien `deovr://`** (page `/t`, cartes de `/ui`) dans le casque : ils lancent une nouvelle instance de DeoVR en mode bureau.
+
+Tout de suite après, pont encore lancé : `utility\RAPPORT-SUPPORT.bat`. Le rapport commence par **bridge-events.log** (lecteur, sauts, relances de DeoVR avec la mémoire et le disque à cet instant).
+
 ## Procédure idéale pour remonter un problème (ce qui permet de corriger vite)
 
 1. **Utiliser le zip *debug*** (outils dans `utility\`) ; lancer le pont normalement (ou `LANCER-MODE-DEV.bat` pour les journaux détaillés). Ne pas le fermer avant l'étape 4.
 2. **Faire un scénario court et noter l'heure** : ouvrir la bibliothèque dans DeoVR, lancer *un film à la fois* (un H.264, un HEVC si possible), quitter, revenir, ouvrir *En cours*. Si un film pose problème, le relancer une fois (le bilan distingue clic n°1 et n°2).
 3. **Noter, pour chaque film**, en une ligne : le titre (ou le début), ce qui est visible (écran de chargement lisible ? la vidéo démarre seule ? message « relancez » ? image juste, taille, relief ? menu FLAT/180/360 présent ?), l'heure approximative, et l'espace disque libre si Stremio ou le pont semblent bloqués.
 4. **Tout de suite après, pont toujours lancé** : `utility\RAPPORT-SUPPORT.bat` (ou `DeoVR-Stremio-Bridge.exe --report`). Il écrit `data\rapport-support.txt` : version, réglages (secrets masqués), état de chaque film cliqué avec sa chronologie, bilans, banc de test, disque.
-5. **M'envoyer** : `data\rapport-support.txt` (le plus important) + `data\bridge-requests.log` (ce que DeoVR a demandé, à la milliseconde) + vos notes de l'étape 3. En cas de plantage ou de comportement bizarre du pont lui-même : aussi `data\bridge-debug.log` (mode développeur). Jamais `config.json` ni `secrets.dat`.
+5. **M'envoyer** : `data\rapport-support.txt` (le plus important) + `data\bridge-events.log` (ce qu'a fait le lecteur, les sauts, les relances de DeoVR) + `data\bridge-requests.log` (ce que DeoVR a demandé, à la milliseconde) + vos notes de l'étape 3. En cas de plantage ou de comportement bizarre du pont lui-même : aussi `data\bridge-debug.log` (mode développeur). Jamais `config.json` ni `secrets.dat`.
 6. **Si un Labo est en cause** : indiquer son numéro et ce que vous voyez ; son verdict est dans le rapport (`/debug/labo`).
 
 ## Ajouter un test

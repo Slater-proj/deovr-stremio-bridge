@@ -26,7 +26,7 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 | **Nouveautés** | année de sortie la plus récente |
 | **Haute qualité (titre)** | d'après le **titre** uniquement (4K/6K/8K…), donc indicatif |
 | **un onglet par catalogue Stremio** | vos catalogues, filtrés VR/3D (`vrOnly`) |
-| **Local** | le dossier `videos` à côté de l'exe (et les dossiers de `localDirs`) : copiez-y des films téléchargés ailleurs, ils se lisent en entier. Le format VR se lit dans le nom du fichier (`_180_LR`, `_360_TB`…) ; sinon `localDefaultFormat` |
+| **Local** | le dossier `videos` à côté de l'exe (et les dossiers de `localDirs`) : copiez-y des films téléchargés ailleurs, ils se lisent en entier. Le format VR se lit dans le nom du fichier (`_180_LR`, `_360_TB`…) et il est alors déclaré ; sinon le menu FLAT / 180 / 360 / fisheye de DeoVR est proposé (il retient votre choix par vidéo), sauf si `localDefaultFormat` ou `"formatMenu": "declare"` l'impose |
 | **Test pont** | six vidéos de test, le mode d'emploi et le banc de test casque (Labos 1 à 16) : voir [TESTING.md](TESTING.md) |
 
 ## Lire un film
@@ -39,6 +39,10 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 6. Vous pouvez **quitter** : le téléchargement continue `holdMinutes` (30 min) puis se met en pause (la partie reçue reste dans le cache Stremio). Relancer le film reprend où il en était.
 
 Jusqu'à `maxDownloads` (3) films sont actifs en même temps ; au-delà, le plus ancien est mis en pause. Si votre cache Stremio est petit, le pont réduit ce nombre.
+
+## Sauter dans un film en cours de téléchargement
+
+DeoVR n'affiche pas ce qui est téléchargé. Sauter dans la partie reçue est instantané (voir `/status.json` → `disponible`). Un saut dans une zone non reçue fait chercher les données chez les pairs : au bout de `seekGuardSec` (5 s) le pont refuse (503) pour ne pas figer le lecteur, et précharge la zone ; réessayez le même saut 10 à 30 s plus tard.
 
 ## Mode échantillon (aperçu rapide)
 
