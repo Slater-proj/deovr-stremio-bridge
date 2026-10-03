@@ -48,13 +48,15 @@ Jusqu'à `maxDownloads` (3) films sont actifs en même temps ; au-delà, le plus
 | `[S0]` | 0 seeder : fin de liste, probablement impossible à lire |
 | `[S?]` | pas encore analysé ; devient `[Sxx]` après analyse |
 | `[HTTP]` | lien HTTP direct (pas de torrent) |
-| `[EN COURS 18 % · 1,4 Mo/s]` | téléchargement actif |
+| `[EN COURS 18 % · 3,1/17,0 Go · 1,4 Mo/s · reste ~2,8 h]` | téléchargement actif : part reçue / taille du fichier, débit, temps restant estimé |
 | `[PRÊT · 8 min en tampon]` | assez de film converti pour lire |
 | `[PRÊT · COMPLET]` / `[EN CACHE · COMPLET]` | film entièrement reçu |
 | `[PRÊT · relancez le film]` | film HEVC en tampon : Retour, puis relancer (lecture directe) |
 | `[RECHERCHE · 3 pairs]`, `[BLOQUÉ · 0 pair]`, `[BLOQUÉ · aucune donnée]`, `[PAUSE · reprise au clic]` | recherche, source morte (ou pairs qui n'envoient rien après 90 s), arrêté |
 | `[ÉCHEC · aucune donnée]` | au dernier clic, rien n'est arrivé en 90 s malgré les seeders annoncés : film placé en fin de liste et retiré de *Plus de seeds* pendant 2 h |
-| `[ARRÊTÉ · disque plein]` | téléchargement arrêté faute de place (`minFreeCriticalGB`) |
+| `[ARRÊTÉ · disque plein]` | téléchargement arrêté faute de place (moins de 1 Go libre, `minFreeCriticalGB`) |
+
+Sous 15 Go libres (`minFreeGB`), une ligne « Disque : N Go libres (fichiers du pont : M Go) » s'ajoute en bas de l'onglet *En cours*.
 
 Les pastilles sont des seeders annoncés, pas une garantie de lecture : le téléchargement réel dépend du réseau.
 

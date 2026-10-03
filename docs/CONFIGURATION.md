@@ -52,19 +52,19 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND
 | `holdMinutes` | `30` | un film lancé reste actif (téléchargement continu) ce temps après la dernière activité du lecteur |
 | `formatMenu` | `"auto"` | mesuré au casque : dès que la fiche déclare screenType/stereoMode, DeoVR cache son sélecteur de mode (FLAT/180/360/fisheye). "declare" = toujours déclarer (image juste d'emblée, pas de menu) ; "free" = ne jamais déclarer (menu présent, image côte à côte brute jusqu'à votre choix, DeoVR le retient par film) ; "auto" = déclarer seulement si le titre/flux dit le format |
 | `loaderTextScale` | `1` | taille du texte de l'écran de chargement en VR (1 = défaut ; 0.7 plus petit, 1.3 plus grand) |
-| `minFreeCriticalGB` | `3` | disque : sous ce seuil les téléchargements sont arrêtés et les nouveaux clics refusés avec un message (Stremio plante sinon) |
+| `minFreeCriticalGB` | `1` | disque : les clics sont toujours acceptés ; sous ce seuil (dernier moment) les téléchargements sont arrêtés, les fichiers temporaires supprimés et les nouveaux clics refusés avec un message (Stremio plante sinon) |
 | `coursSlots` | `6` | onglet « En cours » : nombre d'emplacements fixes (DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste) |
 | `maxDownloads` | `3` | films téléchargés en même temps (le plus ancien est mis en pause au-delà) |
 | `minBufferSec` | `20` | tampon minimum (secondes de film converties) avant de passer de l'écran de chargement au film |
 | `maxAheadMin` | `30` | ffmpeg ne prépare pas plus de N minutes de film d'avance sur le lecteur |
-| `maxAheadMB` | `4000` | ... ni plus de N Mo de segments temporaires d'avance (films 8K très lourds) |
+| `maxAheadMB` | `1000` | ... ni plus de N Mo de segments temporaires d'avance par film (films 8K très lourds : 14 Mo/s remplissent 4 Go en 5 min) |
 | `firstWaitMs` | `0` | attente max avant de répondre à la 1re demande du lecteur (0 = l'écran de chargement apparaît tout de suite) |
 | `startMode` | `"rapide"` | "rapide" : le film démarre dès minBufferSec de film en tampon, même si le débit est trop faible (pauses possibles ; pratique pour zapper) ; "sans-coupure" : attend l'avance nécessaire pour aller au bout sans pause (patientMaxMin) |
 | `patientMaxMin` | `45` | startMode "sans-coupure", débit trop faible : le pont attend d'avoir assez d'avance pour finir le film sans coupure, au plus N min de film d'avance |
 | `landscapeThumbs` | `true` | vignettes 16:9 composées (DeoVR affiche en paysage) ; false = affiche Stremio brute |
 | `stremioPingMs` | `15000` | fréquence du test « Stremio répond-il ? » |
 | `ffmpegRestarts` | `3` | relances de ffmpeg si la conversion plante en cours de film |
-| `diskCheckMs` | `20000` | fréquence du contrôle d'espace disque pendant une lecture |
+| `diskCheckMs` | `5000` | fréquence du contrôle d'espace disque (en plus : au plus 1 s pendant que ffmpeg écrit) |
 | `minFreeGB` | `15` | en dessous, les segments déjà vus depuis longtemps sont supprimés (dossier temporaire) |
 | `trimKeepSec` | `300` | ... en gardant ce nombre de secondes derrière le lecteur |
 | `loaderMaxMin` | `30` | l'écran de chargement s'arrête après N min sans aucune donnée |

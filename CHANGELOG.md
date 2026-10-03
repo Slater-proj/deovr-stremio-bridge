@@ -4,6 +4,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Corrigé (5e test du 03/10 : disque C: plein, DeoVR relancé 5 fois en 10 min)
+Constat (journaux) : le pont tournait sur un disque à 6,6 Go libres ; un film 8K déjà en cache a fait écrire à ffmpeg ~1 Go en quelques secondes, le disque est tombé à 2,5 Go, alors que le disque du cache Stremio n'était pas plein.
+- **Disque** : les clics sont toujours acceptés ; le seuil critique passe de 3 Go à **1 Go** (`minFreeCriticalGB`) : à ce dernier moment, téléchargements arrêtés, segments temporaires supprimés, nouveaux clics refusés. Contrôle toutes les 5 s (`diskCheckMs`) et au plus 1 s pendant que ffmpeg écrit.
+- **Moins de fichiers temporaires** : avance de ffmpeg plafonnée à 1 Go par film (`maxAheadMB`, avant 4 Go) et plancher d'avance réduit (30 s au lieu de 60 s au-delà du tampon).
+- **Restes d'un arrêt brutal** : `live/` et `hls/` sont vidés au démarrage du pont (avant : seulement après 6 h). Ce nettoyage ne se fait plus au chargement du module (`--report` ne touche à rien).
+### Ajouté
+- **Avancement dans la VR** : `[EN COURS 18 % · 3,1/17,0 Go · 1,4 Mo/s · reste ~2,8 h]` (onglet *En cours* et titre de la fiche).
+- **Place prise par le pont** : `/debug/perf` → `disque.pont` (par dossier), donc dans le rapport d'assistance ; ligne « Disque : N Go libres (fichiers du pont : M Go) » en bas de *En cours* sous `minFreeGB`.
+
 ### Ajouté (après le 4e test du 02/10)
 - **Démarrage rapide** (`startMode`, `"rapide"` par défaut) : le film démarre dès `minBufferSec` (20 s) de film en tampon, même quand le débit est trop faible (l'écran prévient que des pauses suivront). Avant, un film 8K à 1,5 Mo/s pour 14,8 Mo/s nécessaires attendait 29 min de tampon. `"sans-coupure"` garde l'ancien comportement.
 - **Banc de test, Labos 13 à 16**, pour décider de la bascule HEVC automatique (sans « Retour puis relancer ») et du zapping : 13 = chargement HEVC fMP4 → vrai format de film (HEVC Main 10 8192×4096, MKV copié en fMP4) ; 14 = chargement H.264 **fMP4** → film HEVC fMP4 (le Labo 5 en TS se figeait) ; 15 = chargement HEVC → film H.264 (mauvaise devinette du codec) ; 16 = saut dans une vidéo de 90 s dont les segments arrivent « à la demande » (journal des sauts dans `/debug/labo`). Les scènes lourdes (13, 16) sont fabriquées en dernier ; `/debug/labo` indique si chaque scène est prête.

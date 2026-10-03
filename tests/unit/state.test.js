@@ -32,3 +32,24 @@ test('film « mort au clic » (aucune donnée ni métadonnée après 90 s malgr�
   assert.ok(L.seedMetas().some(m => m.id === 'dead-1'), 'nouvelle chance après 2 h');
   L.clickDead.delete('dead-1');
 });
+
+test('dlState : avancement lisible dans la VR (Go reçus / total, débit, temps restant)', () => {
+  const l = L.dlState(D({ readBytes: 5e6, meta: true, size: 17e9, progress: 0.18, speed: 1.4e6, need: 5e5 })).label;
+  assert.match(l, /^EN COURS 18 % · 3,1\/17,0 Go · 1,4 Mo\/s · reste ~2,8 h$/);
+  assert.match(L.dlState(D({ readBytes: 5e6, meta: true, size: 17e9, progress: 0.18 })).label, /^EN COURS 18 % · 3,1\/17,0 Go$/, 'sans débit : pas de temps restant');
+  assert.match(L.dlState(D({ readBytes: 5e6, meta: true, size: 2e9, progress: 0.5, speed: 5e6 })).label, /reste ~3 min$/);
+});
+
+test('disque : les clics sont acceptés jusqu\'au dernier moment (1 Go), l\'avance par film est plafonnée', () => {
+  assert.equal(L.cfg.minFreeCriticalGB, 1); assert.equal(L.cfg.maxAheadMB, 1000); assert.equal(L.cfg.diskCheckMs, 5000);
+});
+
+test('cleanTemp : les restes d\'une exécution interrompue (live/, hls/) sont supprimés tout de suite ; les vignettes restent ; tmpUsage compte l\'espace pris', () => {
+  const fs = require('fs'), path = require('path'), T = L.cfg.tempDir;
+  fs.mkdirSync(path.join(T, 'live', 'abc-1-1', 'real'), { recursive: true }); fs.writeFileSync(path.join(T, 'live', 'abc-1-1', 'real', 'seg00000.ts'), Buffer.alloc(3e6));
+  fs.mkdirSync(path.join(T, 'hls', 'x'), { recursive: true }); fs.writeFileSync(path.join(T, 'hls', 'x', 'seg.ts'), Buffer.alloc(2e6));
+  fs.mkdirSync(path.join(T, 'thumbs'), { recursive: true }); fs.writeFileSync(path.join(T, 'thumbs', 'a.jpg'), 'x');
+  assert.ok(L.tmpUsage().total_Mo >= 5, JSON.stringify(L.tmpUsage()));
+  const freed = L.cleanTemp();
+  assert.ok(freed >= 5e6); assert.deepEqual(fs.readdirSync(path.join(T, 'live')), []); assert.deepEqual(fs.readdirSync(path.join(T, 'hls')), []); assert.ok(fs.existsSync(path.join(T, 'thumbs', 'a.jpg')));
+});

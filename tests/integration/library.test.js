@@ -129,3 +129,14 @@ test('sécurité : un nom de domaine extérieur dans l\'en-tête Host est refus�
   assert.equal(await get(`localhost:${bridge.port}`), 200);
   assert.equal(await get(`127.0.0.1:${bridge.port}`), 200);
 });
+
+test('démarrage : les restes de live/ laissés par un arrêt brutal sont supprimés ; /debug/perf indique la place prise par le pont', async () => {
+  const dataDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'bridge-clean-')), old = require('path').join(dataDir, 'tmp', 'live', 'dead-0-1', 'real');
+  require('fs').mkdirSync(old, { recursive: true }); require('fs').writeFileSync(require('path').join(old, 'seg00000.ts'), Buffer.alloc(2e6));
+  const b = await startBridge(mocks, {}, { dataDir });
+  try {
+    assert.ok(!require('fs').existsSync(require('path').join(dataDir, 'tmp', 'live', 'dead-0-1')), 'dossier laissé par la précédente exécution');
+    const p = await b.json('/debug/perf'); assert.equal(typeof p.disque.pont.total_Mo, 'number'); assert.match(p.disque.pont.dossier, /tmp$/);
+    assert.match(b.out(), /nettoyage : \d+ Mo/);
+  } finally { await b.stop(); }
+});
