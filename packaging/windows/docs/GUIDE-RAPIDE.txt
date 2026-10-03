@@ -44,7 +44,11 @@ Rien a installer : tout est dans ce dossier. Supprimer le dossier supprime tout.
      bindHost     "127.0.0.1" = seulement ce PC ; "0.0.0.0" = aussi un casque autonome / le reseau
      platform     "windows" (DeoVR PC) ou "quest" (casque autonome)
      vrOnly       true = seulement les films VR/3D ; false = tous les films des catalogues
-     localDirs    dossiers de videos locales, ex. ["D:\\VR"]
+     localDirs    dossiers de videos supplementaires, ex. ["D:\\VR"]
+                  (le dossier "videos" a cote de l'exe est lu d'office : copiez-y vos films,
+                   ils apparaissent dans l'onglet "Local" de DeoVR)
+     sampleMode   true = apercu : seulement des extraits du film (debut, milieu, fin)
+     sampleCount  nombre d'extraits (3 par defaut) ; sampleMinutes : duree de chaque extrait
      formatMenu   "auto" : le format VR est declare seulement s'il est lu dans le titre, sinon le menu FLAT/180/360
                   de DeoVR est disponible (choisissez une fois, DeoVR s'en souvient) ; "declare" : toujours
                   declare (image juste d'emblee, mais pas de menu) ; "free" : menu toujours disponible

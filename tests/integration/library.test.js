@@ -140,3 +140,17 @@ test('démarrage : les restes de live/ laissés par un arrêt brutal sont suppri
     assert.match(b.out(), /nettoyage : \d+ Mo/);
   } finally { await b.stop(); }
 });
+
+test('onglet « Local » : le dossier videos du pont est lu d\'office (vide : message ; avec un fichier : vidéo listée, format lu dans le nom, MKV HEVC jamais converti en HLS)', async () => {
+  const empty = await bridge.json('/deovr'), loc0 = scene(empty, 'Local');
+  assert.ok(loc0, 'onglet Local présent'); assert.match(loc0.list[0].title, /Dossier vide/);
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-local-')); fs.mkdirSync(path.join(dataDir, 'videos'), { recursive: true });
+  fs.copyFileSync(path.join(__dirname, '..', '..', 'bridge', 'test', 'test-3d-sbs.mp4'), path.join(dataDir, 'videos', 'Ma_scene_180_LR.mp4'));
+  const b = await startBridge(mocks, {}, { dataDir });
+  try {
+    const lib = await b.json('/deovr'), loc = scene(lib, 'Local');
+    assert.equal(loc.list.length, 1); assert.equal(loc.list[0].title, 'Ma scene 180 LR');
+    const v = await b.json(new URL(loc.list[0].video_url).pathname);
+    assert.equal(v.screenType, 'dome'); assert.equal(v.stereoMode, 'sbs'); assert.match(v.encodings[0].videoSources[0].url, /\/localfile\//);
+  } finally { await b.stop(); }
+});

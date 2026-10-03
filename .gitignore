@@ -13,6 +13,7 @@ rapport-support.txt
 Thumbs.db
 # --- données de l'exe portable et fichiers sensibles ---
 data/
+videos/
 tmp/
 secrets.dat
 dist/exe-build/

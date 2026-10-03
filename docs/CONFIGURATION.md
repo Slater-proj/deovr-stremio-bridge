@@ -35,7 +35,14 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND
 | `platform` | `"windows"` | 'windows' (DeoVR PC : MP4/MOV/AVI, pas MKV/AV1/VP9) ou 'quest' (MKV/WebM/AV1 ok) |
 | `ffmpeg` | `ffmpeg fourni avec l'exe, sinon celui du PATH` | pour convertir MKV -> HLS à la volée (DeoVR Windows ne lit pas MKV) |
 | `remux` | `true` | autorise la conversion avec ffmpeg (MKV, écran de chargement, vignettes) ; false = lecture directe uniquement |
-| `localDirs` | `(env.LOCAL_DIRS ? env.LOCAL_DIRS.split(';').filter(Boolean) : [])` | dossiers de vidéos sur ce PC (onglet « Mes vidéos ») |
+| `localDirs` | `(env.LOCAL_DIRS ? env.LOCAL_DIRS.split(';').filter(Boolean) : [])` | dossiers de vidéos supplémentaires sur ce PC (onglet « Local ») |
+| `localFolder` | `true` | true = le dossier « videos » du pont (à côté de l'exe) est lu aussi : copiez-y des vidéos téléchargées ailleurs, elles apparaissent dans l'onglet « Local » |
+| `videosDir` | `—` | emplacement du dossier « videos » (par défaut : à côté de l'exe) |
+| `localDefaultFormat` | `['flat', 'vr180', 'vr360'].includes(file.localDefaultFormat) ? file.localDefaultFormat : 'flat'` | vidéo locale sans indice VR dans son nom (_180_LR, _360, _TB…) : "flat" = écran plat ; "vr180" = VR180 côte à côte ; "vr360" = sphère 360° mono |
+| `sampleMode` | `false` | MODE ÉCHANTILLON : au lieu de tout télécharger, ne récupérer que des extraits (début, milieu, fin…) pour avoir un aperçu rapide du film ; le film est lu en direct (les zones non téléchargées bloquent la lecture) |
+| `sampleCount` | `3))` | nombre d'extraits répartis du début à la fin du film (3 = début, milieu, fin) |
+| `sampleMinutes` | `+file.sampleMinutes > 0 ? +file.sampleMinutes : 2` | durée de chaque extrait, en minutes |
+| `samplePadSec` | `15` | marge ajoutée de chaque côté d'un extrait (le débit d'un film varie : sans marge, le bord de l'extrait manquerait) |
 | `showHealth` | `true` | pastille de santé dans le titre |
 | `scanAll` | `false` | analyser aussi les films sans marqueur VR/3D dans le titre |
 | `scanConcurrency` | `6` | films classés en parallèle (phase rapide : addons + trackers, sans démarrer de torrent) |

@@ -26,7 +26,7 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 | **Nouveautés** | année de sortie la plus récente |
 | **Haute qualité (titre)** | d'après le **titre** uniquement (4K/6K/8K…), donc indicatif |
 | **un onglet par catalogue Stremio** | vos catalogues, filtrés VR/3D (`vrOnly`) |
-| **Mes vidéos** | vos dossiers locaux (`localDirs`) |
+| **Local** | le dossier `videos` à côté de l'exe (et les dossiers de `localDirs`) : copiez-y des films téléchargés ailleurs, ils se lisent en entier. Le format VR se lit dans le nom du fichier (`_180_LR`, `_360_TB`…) ; sinon `localDefaultFormat` |
 | **Test pont** | six vidéos de test, le mode d'emploi et le banc de test casque (Labos 1 à 16) : voir [TESTING.md](TESTING.md) |
 
 ## Lire un film
@@ -40,6 +40,10 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 
 Jusqu'à `maxDownloads` (3) films sont actifs en même temps ; au-delà, le plus ancien est mis en pause. Si votre cache Stremio est petit, le pont réduit ce nombre.
 
+## Mode échantillon (aperçu rapide)
+
+`"sampleMode": true` dans `config.json` : au lieu de tout télécharger, le pont ne récupère que `sampleCount` extraits (3 par défaut : début, milieu, fin) de `sampleMinutes` minutes chacun (2 par défaut). Un film qui prendrait 4 h à télécharger est consultable en quelques minutes. Le film est lu en direct : après l'écran de chargement, « Retour » puis relancer le film ; dans les zones téléchargées on peut sauter librement, **en dehors d'elles la lecture se fige** (Stremio cherche les données chez les pairs). Les zones disponibles sont listées dans `/status.json` (champ `disponible`). Pour avoir le film complet, repassez `sampleMode` à `false` : ce qui est déjà dans le cache de Stremio est réutilisé.
+
 ## Pastilles dans les titres
 
 | Pastille | Sens |
@@ -51,6 +55,7 @@ Jusqu'à `maxDownloads` (3) films sont actifs en même temps ; au-delà, le plus
 | `[EN COURS 18 % · 3,1/17,0 Go · 1,4 Mo/s · reste ~2,8 h]` | téléchargement actif : part reçue / taille du fichier, débit, temps restant estimé |
 | `[PRÊT · 8 min en tampon]` | assez de film converti pour lire |
 | `[PRÊT · COMPLET]` / `[EN CACHE · COMPLET]` | film entièrement reçu |
+| `[ÉCHANTILLONS 2/3 · PRÊT, relancez]`, `[ÉCHANTILLONS PRÊTS · 3 × 2 min]` | mode échantillon : extraits reçus / prévus |
 | `[PRÊT · relancez le film]` | film HEVC en tampon : Retour, puis relancer (lecture directe) |
 | `[RECHERCHE · 3 pairs]`, `[BLOQUÉ · 0 pair]`, `[BLOQUÉ · aucune donnée]`, `[PAUSE · reprise au clic]` | recherche, source morte (ou pairs qui n'envoient rien après 90 s), arrêté |
 | `[ÉCHEC · aucune donnée]` | au dernier clic, rien n'est arrivé en 90 s malgré les seeders annoncés : film placé en fin de liste et retiré de *Plus de seeds* pendant 2 h |

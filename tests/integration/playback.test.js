@@ -154,3 +154,19 @@ describe('film HEVC : le lecteur DeoVR ne décode pas le HEVC dans un flux HLS',
     assert.match(JSON.stringify(await bridge.json('/debug/live')), /hevc/i, 'codec HEVC mesuré par ffmpeg');
   });
 });
+
+describe('mode échantillon : seulement des extraits (début, milieu, fin), lecture directe', { skip: !HAS_FFMPEG && 'ffmpeg absent' }, () => {
+  test('3 extraits lus par tranches, jamais le film en entier ; état « ÉCHANTILLONS PRÊTS » ; zones reçues indiquées', { timeout: 90000 }, async () => {
+    const film = makeFilm(90), mocks = await startMocks({ film: film.data }), bridge = await startBridge(mocks, { sampleMode: true, sampleCount: 3, sampleMinutes: 0.15, samplePadSec: 1, diskCheckMs: 1000 });
+    try {
+      const url = await filmUrl(bridge, 1);
+      const r = await playHls(url, { seconds: 12 }); assert.equal(r.real, 0, 'mode échantillon : le film n\'est jamais inséré dans le flux HLS (lecture directe au clic suivant)');
+      const d = await bridge.waitFor(async () => { const x = (await downloads(bridge))[0]; return x && /ÉCHANTILLONS PRÊTS/.test(x.etat) ? x : null; }, 60000, 500);
+      assert.equal(d.echantillons, '3/3'); assert.ok(d.disponible && d.disponible.includes('-'), 'zones reçues : ' + d.disponible);
+      const ranged = mocks.history.filter(h => /bytes=\d+-\d+$/.test(h));
+      assert.ok(ranged.length >= 3, 'tranches demandées à Stremio : ' + mocks.history.join(' | '));
+      assert.match(bridge.out(), /mode échantillon : 3 extrait\(s\)/);
+      const v = await bridge.json('/video/movie/mk1.json'); assert.match(v.encodings[0].videoSources[0].url, /\/torrent\//, 'au clic suivant : fichier direct');
+    } finally { await bridge.stop(); await mocks.close(); }
+  });
+});

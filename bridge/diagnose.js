@@ -232,7 +232,7 @@ function judgeProbe(name, p, isVideo = true) {
   head('6a. Bibliothèque locale');
   { const files = cfg.localDirs.length ? L.scanLocal() : [];
     if (!cfg.localDirs.length) warn('Aucun dossier local configuré', 'ajoute "localDirs": ["D:\\\\VR"] dans config.json : c\'est la voie la plus fiable pour tester la lecture VR');
-    else { files.length ? ok('Vidéos locales trouvées', files.length + ' fichier(s)') : fail('Aucune vidéo dans les dossiers locaux', cfg.localDirs.map(() => '<dossier>').join(', '));
+    else { files.length ? ok('Vidéos locales trouvées', files.length + ' fichier(s)') : warn('Aucune vidéo dans les dossiers locaux', 'copiez des vidéos dans le dossier « videos » du pont (onglet Local de DeoVR)');
       for (const f of files.slice(0, 3)) { const v = L.localVideo(f.id, base, cfg.platform); if (v) { const p = await probe(v.encodings[0].videoSources[0].url); judgeProbe(`Lecture locale « ${f.name.slice(0, 40)} » (${v.screenType}/${v.stereoMode}, ${v.encodings[0].videoSources[0].resolution}p)`, p, false); } } } }
   head('6b. Conversion MKV (ffmpeg)');
   { const r = require('child_process').spawnSync(cfg.ffmpeg, ['-version'], { timeout: 5000, encoding: 'utf8' });

@@ -16,6 +16,8 @@ Tiré de la [documentation officielle de DeoVR](https://deovr.com/app/doc) et de
 - **Mémoire de DeoVR** : la bibliothèque (`/deovr`) n'est redemandée que lorsqu'on revient sur le site (pas de rafraîchissement automatique) ; DeoVR demande toutes les fiches `video_url` de la liste affichée à chaque affichage ; la doc dit que l'`id` d'une fiche sert à *mémoriser ses réglages*.
 - **Pas de menu ni de recherche dans la liste native** (aucun champ correspondant dans le format JSON) : ils n'existent que dans les pages web du pont (`/ui`, `/s/mot`) ouvertes dans le navigateur de DeoVR.
 - **Codecs Windows** : HEVC, H.264, WMV, MJPEG… (pas AV1 ni VP9) ; conteneurs MP4, MKV, WebM, MOV, AVI, MPEG, M4V (le pont convertit les MKV en HLS par prudence : le lecteur Windows réel abandonne vite).
+- **Pas de barre de tampon** : le format JSON de DeoVR n'a aucun champ pour montrer une zone téléchargée sur la barre de lecture ; le pont ne peut que l'indiquer dans `/status.json` (`disponible`). Un saut dans une zone non reçue fige le lecteur (mesuré le 03/10 : requête `Range` en attente 6 à 7 s, puis le lecteur la ferme).
+- **Relance de DeoVR (mesuré le 03/10, 5e test)** : une relance se reconnaît à 2 demandes `/deovr` (UA `HMD`) à moins de 3 s d'écart suivies de `GET /` par la fenêtre web (UA `Chrome/111`, qui reçoit `/ui`) ; elle est survenue 3 à 4 s après la fermeture d'une requête `Range` de saut. Cause exacte inconnue : le pont journalise désormais ce qui précède.
 - **Délais** : DeoVR ferme une requête de fiche après ~10 s ; son lecteur abandonne si aucune donnée n'arrive après ~5-15 s.
 - **Titres** : pas d'emoji (ils ne s'affichent pas) → pastilles en ASCII.
 - **Affiches** : DeoVR affiche des vignettes en paysage → le pont compose du 16:9.

@@ -4,6 +4,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Ajouté (après le 5e test du 03/10)
+- **Mode échantillon** (`sampleMode`, éteint par défaut ; `sampleCount` = 3 extraits, `sampleMinutes` = 2 min, `samplePadSec` = 15 s de marge) : au lieu de tout télécharger (4 h pour un film 8K à 1 Mo/s), le pont ne demande à Stremio que des tranches du fichier : début, milieu, fin (ou N extraits répartis), positions estimées d'après la durée et la taille. Le film est toujours lu en direct (écran de chargement puis « relancez le film »), les extraits sont instantanés ; sortir d'un extrait bloque la lecture (zone non téléchargée). État : `[ÉCHANTILLONS 2/3 · PRÊT, relancez]`, puis `[ÉCHANTILLONS PRÊTS · 3 × 2 min]`.
+- **Dossier `videos` à côté de l'exe** (`localFolder`, vrai par défaut) : copiez-y des films téléchargés ailleurs, ils apparaissent dans l'onglet **Local** de DeoVR (avant : « Mes vidéos », seulement avec `localDirs`). `localDefaultFormat` (`flat` / `vr180` / `vr360`) pour les fichiers dont le nom n'indique pas le format. Les MKV HEVC locaux sont lus directement (convertis en HLS TS ils redémarraient à 15 s).
+- **Zones reçues** par film (`disponible` dans `/status.json` et `/debug/downloads`, ex. `0-15 %, 50-52 %`) : ce qui se lit sans attente. DeoVR n'a aucun moyen d'afficher une zone « téléchargée » sur sa barre de lecture.
+- **Diagnostic des sauts et des relances de DeoVR** : le journal note chaque saut du lecteur (« SAUT : va à 37 % (zone NON reçue) — premières données après 6,7 s ») et, quand DeoVR se relance (2 demandes `/deovr` en moins de 3 s), la dernière requête du lecteur vidéo (`/debug/perf` → `relancesDeoVR`).
+- Page `/ui` : gros bouton « Retour à la bibliothèque DeoVR » (lien `deovr://…/deovr`), à confirmer au casque avec le lien G de la page `/t`.
+### Corrigé
+- Une sonde HEAD sur `/torrent/…` (DeoVR en envoie une avant chaque lecture) ne compte plus comme un clic.
+
 ### Corrigé (5e test du 03/10 : disque C: plein, DeoVR relancé 5 fois en 10 min)
 Constat (journaux) : le pont tournait sur un disque à 6,6 Go libres ; un film 8K déjà en cache a fait écrire à ffmpeg ~1 Go en quelques secondes, le disque est tombé à 2,5 Go, alors que le disque du cache Stremio n'était pas plein.
 - **Disque** : les clics sont toujours acceptés ; le seuil critique passe de 3 Go à **1 Go** (`minFreeCriticalGB`) : à ce dernier moment, téléchargements arrêtés, segments temporaires supprimés, nouveaux clics refusés. Contrôle toutes les 5 s (`diskCheckMs`) et au plus 1 s pendant que ffmpeg écrit.

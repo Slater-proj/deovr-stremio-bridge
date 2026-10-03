@@ -38,6 +38,6 @@ function resolve(argv, env = process.env) {
   // réglages : à côté de l'exe (exe), dans le dossier du code (node), ou dans le dossier de données imposé
   const defaultConfig = mode === 'impose' ? path.join(dataDir, 'config.json') : path.join(appDir, 'config.json'), legacy = path.join(dataDir, 'config.json');
   const configFile = env.BRIDGE_CONFIG ? path.resolve(env.BRIDGE_CONFIG) : (!fs.existsSync(defaultConfig) && fs.existsSync(legacy)) ? legacy : defaultConfig;
-  const r = { sea, appDir, dataDir, resDir: sea ? path.join(appDir, 'resources') : appDir, configFile, tmpDir: path.join(dataDir, 'tmp'), mode }; if (implicit) memo = r; return r;
+  const r = { sea, appDir, dataDir, resDir: sea ? path.join(appDir, 'resources') : appDir, configFile, tmpDir: path.join(dataDir, 'tmp'), videosDir: mode === 'portable' || mode === 'dossier-du-code' ? path.join(appDir, 'videos') : path.join(dataDir, 'videos'), mode }; if (implicit) memo = r; return r;
 }
 module.exports = { resolve, isSea, argOf, writable, userArgs };
