@@ -278,7 +278,7 @@ const unb64u = s => Buffer.from(s, 'base64url').toString();
 let loginNeeded = false;   // vrai tant que le compte Stremio n'est pas connecté (message dans « En cours » ; page /setup)
 const auth = require('./auth')({ cfg, log, dataDir: DATA_DIR, configFile: PATHS.configFile,
   post: (url, body) => getJson(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
-  onChange: () => { cache.clear(); failCache.clear(); loginNeeded = false; } });
+  onChange: () => { cache.clear(); failCache.clear(); libMemo.clear(); loginNeeded = false; } });
 async function getAddons() {
   return cached('addons', 30 * 60000, async () => {
     if (cfg.addonUrls.length) {
@@ -637,6 +637,13 @@ async function catalogScenes(query, max) {   // [{ name, metas }] (réutilisé p
   }))).filter(Boolean);
   if (failed.length) log('warn', `${failed.length} catalogue(s) trop lent(s) ou en panne, ignoré(s) pour cet affichage (addon externe, pas le pont) : ${failed.join(', ')}. Nouvelle tentative en arrière-plan.`);
   return res;
+}
+const libMemo = new Map(), libCount = { construites: 0, servies_du_cache: 0 };
+function libFor(base, q) {   // bibliothèque servie à DeoVR : 8 s de cache (DeoVR la redemande 2 fois en 1 s à chaque relance) ; vidée dès qu'un film change d'état
+  const k = base + '|' + (q || ''), h = libMemo.get(k);
+  if (h && Date.now() - h.t < 8000) { libCount.servies_du_cache++; return h.p; }
+  libCount.construites++; const p = buildLibrary(base, q); libMemo.set(k, { t: Date.now(), p }); p.catch(() => libMemo.delete(k)); if (libMemo.size > 20) libMemo.clear();
+  return p;
 }
 async function buildLibrary(base, query) {
   let scenes = [];
@@ -1194,12 +1201,12 @@ function dlActivate(D) {
   D.active = true; D.activatedAt = Date.now(); D.samples = []; D.reads = []; D.bgStop = false; D.noDataLogged = false; D.firstData = 0; delete D.pausedWhy;
   dlLog(D, 'info', `téléchargement démarré (${[...dls.values()].filter(x => x.active).length}/${cfg.maxDownloads} actifs) — gardé ${cfg.holdMinutes} min après la dernière activité du lecteur`);
   torrentCreate(D.hash, 'clic').catch(() => {});
-  bgLoop(D); if (cfg.sampleMode) sampleLoop(D); dlSave();
+  libMemo.clear(); bgLoop(D); if (cfg.sampleMode) sampleLoop(D); dlSave();
 }
 function dlPause(D, why) {
   if (!D.active) return;
   dlBilan(D, why);
-  D.active = false; D.pausedWhy = why; D.pausedAt = Date.now(); D.bgStop = true;
+  libMemo.clear(); D.active = false; D.pausedWhy = why; D.pausedAt = Date.now(); D.bgStop = true;
   try { D.bgCtl && D.bgCtl.abort(); } catch {}
   liveClose(D);
   fetch(`${cfg.localStremio}/${D.hash}/remove`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
@@ -1767,6 +1774,10 @@ async function torrentCreate(hash, why = 'clic') {   // comme l'appli Stremio : 
   } catch (e) { log('warn', `torrent ${hash.slice(0, 8)}… : /create -> ${e.message}`); }
 }
 async function pipeUpstream(req, res, url, headers = {}, firstByteMs = 0, track = null) {
+  if (track && req.method === 'HEAD') {   // sonde HEAD de DeoVR avant chaque lecture : taille connue -> réponse immédiate, sans demander la moindre donnée à Stremio
+    const D0 = dls.get(`${track.hash}:${track.idx}`), ext0 = (/\.[a-z0-9]{2,4}$/i.exec(new URL(req.url, 'http://x').pathname) || [])[0];
+    if (D0 && D0.size) { res.writeHead(200, { 'content-type': MIME[(ext0 || '').toLowerCase()] || 'video/mp4', 'content-length': D0.size, 'accept-ranges': 'bytes' }); return res.end(); }
+  }
   headers = { ...headers };
   const tStart = Date.now();
   const Dl = track && req.method !== 'HEAD' ? dlTouch(track.hash, track.idx, `${req.method} flux direct`, req) : null;   // une sonde HEAD n'est pas un clic   // le clic démarre / maintient le téléchargement (registre « En cours »)
@@ -1998,7 +2009,7 @@ function vidFor(key, fn) {   // fiche vidéo : cache 45 s des réponses valides 
   const p = fn().then(v => { if (v) { vidCache.set(key, { t: Date.now(), v }); if (vidCache.size > 2000) vidCache.clear(); } return v; });
   vidInflight.set(key, p); p.then(() => vidInflight.delete(key), () => vidInflight.delete(key)); return p;
 }
-function vidInvalidate(id) { for (const k of [...vidCache.keys()]) if (k.includes(`:${id}:`)) vidCache.delete(k); }   // l'état du film a changé (prêt...) : la prochaine fiche doit être recalculée, pas servie depuis le cache de 45 s
+function vidInvalidate(id) { libMemo.clear(); for (const k of [...vidCache.keys()]) if (k.includes(`:${id}:`)) vidCache.delete(k); }   // l'état du film a changé (prêt...) : la prochaine fiche doit être recalculée, pas servie depuis le cache de 45 s
 // ----- mémoire : le pont peut tourner des jours (démarrage automatique) : on oublie ce qui est périmé au lieu de tout garder -----
 function pruneMemory(now = Date.now()) {
   const drop = (m, maxMs, t = v => v.t) => { for (const [k, v] of m) if (now - (t(v) || 0) > maxMs) m.delete(k); };
@@ -2014,7 +2025,7 @@ function perfData() {
   const lv = {}; for (const [, h] of filmHealth) { const k = h.hidden ? 'masqués(aucune source)' : (BADGES[h.level] || '⚪'); lv[k] = (lv[k] || 0) + 1; }
   return { uptimeS: Math.round(process.uptime()), version: VERSION, scan: { enFile: scanQ.length, enCours: scanning, ...scanStat }, films: { analyses: filmHealth.size, parNiveau: lv }, enCours: dlData(false), bilans: bilans.slice(-15), ouverturesTest: Object.fromEntries(openTests), racine: rootHits.slice(-8), relancesDeoVR: relaunch.list.slice(-10),
     disque: { libreGo: disk.freeGB, ou: disk.where, bas: disk.low, critique: disk.critical, pont: tmpUsage() }, cacheStremio: cacheInfo, stremioArrete: stremioDown ? { depuis_s: Math.round((Date.now() - stremioDown.since) / 1000), cause: stremioDown.why } : null, ecranChargement: { actif: cfg.loadingScreen, ffmpeg: ffmpegOk, ffmpegVersion: ffmpegMajor, hevc: hevcEnc || 'non', police: FONT ? 'oui' : 'non', sessions: liveData() },
-    fichesVideo: { enCours: jsonLimit.running(), enAttente: jsonLimit.waiting(), ...perfCount }, dns: { mode: cfg.dnsMode, ...dnsStats },
+    fichesVideo: { enCours: jsonLimit.running(), enAttente: jsonLimit.waiting(), ...perfCount }, bibliotheque: libCount, dns: { mode: cfg.dnsMode, ...dnsStats },
     scrape: { ...scrapeStats, trackers: cfg.scrapeTrackers, memo: seedMemo.size }, hotesEnPanne: [...hostDown].filter(([, x]) => Date.now() - x.t < 120000).map(([h, x]) => ({ hote: h.replace(/^(.{3}).*(\..*)$/, '$1***$2'), code: x.code })) };
 }
 let lastState = '';
@@ -2100,7 +2111,7 @@ function start(port = cfg.port) {
       if (u.pathname === '/deovr' || u.pathname === '/') {
         if (u.searchParams.get('via') === 'G') noteOpen('G', 'lien deovr:// vers la bibliothèque', req);
         if (/HMD/.test(req.headers['user-agent'] || '')) { const nw = Date.now(); if (nw - relaunch.lastHmd < 3000) { const lp = relaunch.lastPlayer, ago = lp ? Math.round((nw - lp.fin) / 1000) : null, ev = { t: new Date().toISOString().slice(11, 19), derniereRequeteLecteur_ilYa_s: ago, chemin: lp && lp.path, range: lp && lp.range, duree_ms: lp && lp.ms, fermeeParLeLecteur: lp && lp.fermeeParLeLecteur }; relaunch.list.push(ev); if (relaunch.list.length > 20) relaunch.list.shift(); log('warn', `DeoVR s'est probablement relancé (2 demandes /deovr en ${((nw - relaunch.lastHmd) / 1000).toFixed(1)} s) — dernière demande du lecteur vidéo il y a ${ago ?? '?'} s : ${lp ? `${lp.path} ${lp.range || ''} -> ${lp.status} après ${lp.ms} ms${lp.fermeeParLeLecteur ? ' (fermée par le lecteur)' : ''}` : 'aucune'}`); } relaunch.lastHmd = nw; }
-        rootHits.push({ t: new Date().toISOString().slice(11, 19), chemin: u.pathname, accept: String(req.headers.accept || '-').slice(0, 60), ua: String(req.headers['user-agent'] || '').slice(0, 50), reponse: 'bibliothèque JSON' }); if (rootHits.length > 30) rootHits.shift(); log('info', `bibliothèque demandée (${u.pathname}) par ${String(req.headers['user-agent'] || '?').slice(0, 40)} Accept=${String(req.headers.accept || '-').slice(0, 40)}`); return send(res, 200, await buildLibrary(base, u.searchParams.get('q'))); }
+        rootHits.push({ t: new Date().toISOString().slice(11, 19), chemin: u.pathname, accept: String(req.headers.accept || '-').slice(0, 60), ua: String(req.headers['user-agent'] || '').slice(0, 50), reponse: 'bibliothèque JSON' }); if (rootHits.length > 30) rootHits.shift(); log('info', `bibliothèque demandée (${u.pathname}) par ${String(req.headers['user-agent'] || '?').slice(0, 40)} Accept=${String(req.headers.accept || '-').slice(0, 40)}`); return send(res, 200, await libFor(base, u.searchParams.get('q'))); }
       const lvm = u.pathname.match(/^\/live\/([0-9a-f]{40})\/(-?\d+)\/((?:real\/)?[\w.-]+)$/i);
       if (lvm) { if (!ffmpegOk) { res.writeHead(501); return res.end(); } const hh = lvm[1].toLowerCase(); return serveLive(req, res, hh, lvm[2], lvm[3]); }
       if (u.pathname === '/debug/live') return send(res, 200, liveData());

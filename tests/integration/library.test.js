@@ -25,7 +25,7 @@ test('/deovr : onglets dans l\'ordre (En cours d\'abord), un onglet par catalogu
 });
 
 test('« En cours » vide : des emplacements fixes et libres, qui s\'ouvrent sans erreur', async () => {
-  const lib = await library(), list = scene(lib, 'En cours').list;
+  const lib = await library(), list = scene(lib, 'En cours').list.filter(i => !/^Disque : /.test(i.title));   // la ligne d'information « Disque : N Go libres » s'ajoute en bas quand le disque du test est sous minFreeGB
   assert.equal(list.length, 6, 'emplacements fixes (coursSlots)');
   assert.match(list[0].title, /Emplacement 1 · libre/);
   assert.match(list[0].video_url, /\/video\/slot\/1\.json$/);
@@ -152,5 +152,13 @@ test('onglet « Local » : le dossier videos du pont est lu d\'office (vide : me
     assert.equal(loc.list.length, 1); assert.equal(loc.list[0].title, 'Ma scene 180 LR');
     const v = await b.json(new URL(loc.list[0].video_url).pathname);
     assert.equal(v.screenType, 'dome'); assert.equal(v.stereoMode, 'sbs'); assert.match(v.encodings[0].videoSources[0].url, /\/localfile\//);
+  } finally { await b.stop(); }
+});
+
+test('bibliothèque : deux demandes /deovr rapprochées (DeoVR relancé) = une seule construction', async () => {
+  const b = await startBridge(mocks);
+  try {
+    const t0 = Date.now(); await b.json('/deovr'); await b.json('/deovr');
+    const p = (await b.json('/debug/perf')).bibliotheque; assert.ok(p.servies_du_cache >= 1 && p.construites >= 1, JSON.stringify(p));
   } finally { await b.stop(); }
 });

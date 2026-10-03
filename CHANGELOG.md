@@ -11,7 +11,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 - **Diagnostic des sauts et des relances de DeoVR** : le journal note chaque saut du lecteur (« SAUT : va à 37 % (zone NON reçue) — premières données après 6,7 s ») et, quand DeoVR se relance (2 demandes `/deovr` en moins de 3 s), la dernière requête du lecteur vidéo (`/debug/perf` → `relancesDeoVR`).
 - Page `/ui` : gros bouton « Retour à la bibliothèque DeoVR » (lien `deovr://…/deovr`), à confirmer au casque avec le lien G de la page `/t`.
 ### Corrigé
-- Une sonde HEAD sur `/torrent/…` (DeoVR en envoie une avant chaque lecture) ne compte plus comme un clic.
+- Une sonde HEAD sur `/torrent/…` (DeoVR en envoie une avant chaque lecture) ne compte plus comme un clic et reçoit sa réponse sans rien demander à Stremio (taille connue).
+- **Bibliothèque `/deovr` mise en cache 8 s** côté pont (DeoVR la redemande deux fois en 1 s à chaque relance), vidée dès qu'un film change d'état ou à la connexion ; compteurs dans `/debug/perf` → `bibliotheque`.
 
 ### Corrigé (5e test du 03/10 : disque C: plein, DeoVR relancé 5 fois en 10 min)
 Constat (journaux) : le pont tournait sur un disque à 6,6 Go libres ; un film 8K déjà en cache a fait écrire à ffmpeg ~1 Go en quelques secondes, le disque est tombé à 2,5 Go, alors que le disque du cache Stremio n'était pas plein.
