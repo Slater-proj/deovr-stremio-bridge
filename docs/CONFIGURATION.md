@@ -42,6 +42,9 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND
 | `sampleMode` | `false` | MODE ÉCHANTILLON : au lieu de tout télécharger, ne récupérer que des extraits (début, milieu, fin…) pour avoir un aperçu rapide du film ; le film est lu en direct (les zones non téléchargées bloquent la lecture) |
 | `sampleCount` | `3))` | nombre d'extraits répartis du début à la fin du film (3 = début, milieu, fin) |
 | `sampleMinutes` | `+file.sampleMinutes > 0 ? +file.sampleMinutes : 2` | durée de chaque extrait, en minutes |
+| `readAheadMB` | `300` | lecture directe : le pont télécharge en plus jusqu'à N Mo DEVANT la position du lecteur (octets jetés, ils restent dans le cache de Stremio) pour que la lecture ne rattrape pas le téléchargement ; 0 = désactivé |
+| `thumbBadges` | `true` | badges dessinés sur les vignettes (résolution, VR180/VR360/3D, seeders ; barre d'avancement dans « En cours ») : lisibles malgré l'absence d'emoji dans les titres de DeoVR |
+| `toolsTab` | `true` | onglet « Outils » dans DeoVR (rapport, pause, nettoyage, état, mode échantillon) : actions lancées depuis la VR, exécutées quand le lecteur vidéo de DeoVR sur ce PC les ouvre |
 | `seekGuardSec` | `5` | saut du lecteur dans une zone pas encore reçue : si Stremio n'envoie rien en N s, réponse immédiate 503 (le lecteur de DeoVR abandonne de toute façon vers 7 s et DeoVR se relance) et la zone est préchargée ; 0 = désactivé (le lecteur gèle jusqu'à 2 min) |
 | `seekGuardMB` | `20` | le garde ne joue qu'après ce volume déjà lu en direct par le lecteur (jamais pendant l'ouverture du fichier) et pour un saut au-delà du quart de ce volume |
 | `seekPrefetchMB` | `300` | après un saut refusé : Mo préchargés à partir de la position demandée (le prochain essai du lecteur trouve les données) |

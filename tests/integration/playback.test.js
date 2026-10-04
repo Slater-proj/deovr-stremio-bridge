@@ -193,3 +193,16 @@ describe('saut du lecteur dans une zone non reçue : refus rapide + préchargeme
     } finally { await bridge.stop(); await mocks.close(); }
   });
 });
+
+describe('lecture directe : le pont télécharge devant le lecteur (lecture d\'avance)', () => {
+  test('après quelques Ko lus par le lecteur, une tranche est demandée devant sa position, jamais derrière', { timeout: 40000 }, async () => {
+    const film = Buffer.alloc(3e6, 5), mocks = await startMocks({ film }), bridge = await startBridge(mocks, { readAheadMB: 1, seekGuardSec: 0 });
+    try {
+      await filmUrl(bridge, 1);
+      const r0 = await fetch(`${bridge.base}/torrent/${hashOf(1)}/0/video.mp4`, { headers: { range: 'bytes=0-399999' } }), rd = r0.body.getReader(); let got = 0; while (got < 400000) { const { value, done } = await rd.read(); if (done) break; got += value.length; } await rd.cancel();
+      const ahead = await bridge.waitFor(async () => mocks.history.map(h => /bytes=(\d+)-(\d+)$/.exec(h)).filter(Boolean).map(m => [+m[1], +m[2]]).find(([a, b]) => a >= 400000 && b > a), 15000, 300);
+      assert.ok(ahead[0] < 1500000 && ahead[1] <= 1400000 + 1, `tranche devant le lecteur : ${ahead}`);
+      assert.ok((await bridge.json('/debug/downloads')).enCours[0].disponible, 'zones reçues indiquées');
+    } finally { await bridge.stop(); await mocks.close(); }
+  });
+});

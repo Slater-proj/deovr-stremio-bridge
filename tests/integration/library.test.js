@@ -182,3 +182,12 @@ test('par défaut (formatMenu "free") : aucune fiche ne déclare de format, mêm
     assert.equal(v.screenType, undefined); assert.equal(v.stereoMode, undefined); assert.equal(v.is3d, undefined); assert.ok(v.encodings);
   } finally { await b.stop(); }
 });
+
+test('vignettes : badge (résolution, format, seeders) et barre d\'avancement dessinés sur l\'image 16:9', { skip: !HAS_FFMPEG && 'ffmpeg absent' }, async () => {
+  const lib = await bridge.waitFor(async () => { const l = await library(); return scene(l, 'Top VR') && l; });
+  const url = scene(lib, 'Top VR').list[0].thumbnailUrl; assert.match(url, /\/thumb\/[\w-]+\.jpg\?b=/, 'badge dans l\'URL de la vignette');
+  const plain = url.split('?')[0], get = async u => { const r = await fetch(u); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/jpeg'); return Buffer.from(await r.arrayBuffer()); };
+  const a = await get(plain), b = await get(plain + '?b=8K%20VR180%20S12&p=40'), c = await get(plain + '?p=70');
+  assert.ok(!a.equals(b) && !a.equals(c) && !b.equals(c), 'trois images différentes (sans, badge+avancement, avancement seul)');
+  for (const [i, buf] of [b, c].entries()) { const f = path.join(os.tmpdir(), `thumb-ov-${i}.jpg`); fs.writeFileSync(f, buf); assert.equal(cp.spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', f], { encoding: 'utf8' }).stdout.trim(), '960,540'); }
+});

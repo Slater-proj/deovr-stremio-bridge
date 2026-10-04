@@ -62,3 +62,15 @@ test('hostAllowed (anti DNS rebinding) : localhost, IP et noms du réseau local 
   for (const h of ['localhost:4477', '127.0.0.1:4477', '192.168.1.131:4477', '[::1]:4477', 'monpc:4477', 'monpc.local:4477', 'pc.home.arpa', undefined]) assert.ok(L.hostAllowed(h), String(h));
   for (const h of ['evil.example.com:4477', 'rebind.attaquant.net', '127.0.0.1.nip.io:4477']) assert.ok(!L.hostAllowed(h), h);
 });
+
+test('vignettes : badge et avancement passent dans l\'URL ; paramètres reçus assainis (ASCII sûr, avancement arrondi à 10 %)', () => {
+  assert.equal(L.thumbUrl('http://b', ''), '');
+  assert.equal(L.thumbUrl('http://b', 'not-a-url'), 'not-a-url');
+  const u = L.thumbUrl('http://b', 'http://x/p.jpg', { badge: '8K VR180 S34', prog: 40 });
+  if (u.startsWith('http://b/thumb/')) assert.match(u, /\.jpg\?b=8K%20VR180%20S34&p=40$/);   // sans ffmpeg, l'URL d'origine est rendue telle quelle
+  const sp = q => new URLSearchParams(q);
+  assert.deepEqual(L.cleanOv(sp('b=8K%20VR180%20S34&p=43')), { badge: '8K VR180 S34', prog: 40 });
+  assert.deepEqual(L.cleanOv(sp('b=%27%3B%3Cscript%3E%25x%60&p=250')), { badge: 'script%x', prog: 100 });
+  assert.deepEqual(L.cleanOv(sp('')), { badge: '', prog: null });
+  assert.equal(L.cleanOv(sp('b=' + 'A'.repeat(100))).badge.length, 40);
+});

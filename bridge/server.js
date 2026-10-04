@@ -62,6 +62,7 @@ start().then(async () => {
   if (cfg.bindHost === '0.0.0.0') for (const n of nets) log('info', `  http://${n.address}:${cfg.port}   (casque autonome / autre appareil)`);
   log('info', `Dans le casque : tape l'adresse ci-dessus, DeoVR affiche sa bibliothèque (onglet « En cours » en premier, puis « Plus de seeds », « Nouveautés », un onglet par catalogue Stremio).`);
   log('info', `Recherche dans le casque : tape  <adresse>/s/mot  (ex. http://${(nets[0] || { address: 'localhost' }).address}:${cfg.port}/s/avatar). Page web façon deovr.com (PC) : http://localhost:${cfg.port}/ui`);
+  log('info', `Réglages (sans éditer le JSON) : http://localhost:${cfg.port}/settings  |  Vérifications : http://localhost:${cfg.port}/check`);
   log('info', `Test des liens deovr:// : http://localhost:${cfg.port}/t  |  Suivi : /status  |  États : /debug/downloads  |  Journaux : data\\bridge-debug.log`);
   if (cfg.dev) log('info', `Mode développeur : tous les points d'observation sur http://localhost:${cfg.port}/dev ; ffmpeg détaillé dans le journal.`);
   if (L.cfg.ffmpeg === 'ffmpeg') log('info', 'ffmpeg : celui du PATH (aucun ffmpeg fourni à côté de l\'application).');
