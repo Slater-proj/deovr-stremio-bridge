@@ -1,6 +1,6 @@
 {
   "name": "deovr-stremio-bridge",
-  "version": "10.2.0",
+  "version": "10.3.0",
   "description": "Bridge between the Stremio streaming server and the DeoVR VR video player (Windows / PCVR). Zero dependencies.",
   "license": "MIT",
   "private": true,

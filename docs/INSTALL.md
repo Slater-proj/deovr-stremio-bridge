@@ -59,7 +59,7 @@ Tout est dans le dossier de l'exe : `config.json` (réglages, à éditer), `data
 
 `localhost` ne fonctionne que pour DeoVR sur le même PC. Pour un autre appareil : utilisez l'adresse IP du PC affichée au démarrage, lancez une fois `utility\PARE-FEU.bat` (zip debug) en administrateur (ouvre le port en réseau privé), ou autorisez l'exe dans le pare-feu Windows, et mettez `"platform": "quest"` dans `config.json` si vous voulez que MKV/AV1/VP9 soient proposés directement. Le chemin « casque autonome » n'est pas couvert par les tests : les retours sont bienvenus.
 
-Pour n'autoriser que le PC local (plus sûr), mettez `"bindHost": "127.0.0.1"`. La page de connexion `/setup` n'est de toute façon accessible que depuis le PC lui-même.
+Par défaut le pont n'écoute que sur ce PC (`"bindHost": "127.0.0.1"`). Pour un autre appareil, mettez `"bindHost": "0.0.0.0"` (le pont n'a aucune authentification : réseau de confiance seulement). La page de connexion `/setup` n'est de toute façon accessible que depuis le PC lui-même.
 
 ## 5. Mise à jour
 

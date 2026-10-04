@@ -14,7 +14,7 @@ const env = process.env;
 try { if (env.IPV4_FIRST !== '0') require('dns').setDefaultResultOrder('ipv4first'); } catch {}
 const cfg = {
   port: +(env.PORT || file.port || 4477),   // port du pont, 4477 par défaut (peu courant : 8080 est pris par beaucoup de logiciels) ; --port N ou la variable PORT l'emportent
-  bindHost: env.BIND_HOST || file.bindHost || '0.0.0.0',   // '127.0.0.1' = accessible uniquement depuis ce PC (PCVR) ; '0.0.0.0' = aussi depuis le réseau local (casque autonome)
+  bindHost: env.BIND_HOST || file.bindHost || '127.0.0.1',   // '127.0.0.1' (défaut) = accessible uniquement depuis ce PC (PCVR) ; '0.0.0.0' = aussi depuis le réseau local (casque autonome) : le pont n'a aucune authentification
   email: env.STREMIO_EMAIL || file.email || '',   // ANCIEN réglage, inutile : la connexion se fait par la page /setup ; migré puis effacé s'il est présent avec password
   password: env.STREMIO_PASSWORD || file.password || '',   // ANCIEN réglage (voir email) : jamais réécrit par le pont
   authKey: env.STREMIO_AUTHKEY || file.authKey || '',
@@ -62,10 +62,10 @@ const cfg = {
   scrapeMinSeeders: file.scrapeMinSeeders ?? 1,   // seeders minimum annoncés par les trackers pour ne pas classer un film « noir »
   scanMax: file.scanMax ?? 100,                   // films analysés (addons + trackers UDP, sans torrent) par affichage de liste
   scanMs: file.scanMs ?? 25000,                   // diagnostic seulement (diagnose.bat / ?measure=1)
-  testScene: file.testScene ?? true,              // onglet « Test » avec de petites vidéos embarquées
+  testScene: file.testScene ?? !!(env.BRIDGE_DEV || file.dev),   // onglet « Test pont » (vidéos de test et banc de test casque, Labos 1 à 16) : affiché par défaut seulement en mode développeur (--dev)
   extraTrackers: file.extraTrackers || [],        // trackers ajoutés à TOUS les torrents (en plus de ceux de l'addon et des trackers publics)
   holdMinutes: file.holdMinutes ?? 30,             // un film lancé reste actif (téléchargement continu) ce temps après la dernière activité du lecteur
-  formatMenu: ['auto', 'declare', 'free'].includes(file.formatMenu) ? file.formatMenu : 'auto',   // mesuré au casque : dès que la fiche déclare screenType/stereoMode, DeoVR cache son sélecteur de mode (FLAT/180/360/fisheye). "declare" = toujours déclarer (image juste d'emblée, pas de menu) ; "free" = ne jamais déclarer (menu présent, image côte à côte brute jusqu'à votre choix, DeoVR le retient par film) ; "auto" = déclarer seulement si le titre/flux dit le format
+  formatMenu: ['auto', 'declare', 'free'].includes(file.formatMenu) ? file.formatMenu : 'free',   // PAR DÉFAUT "free" (menu FLAT / 180 / 360 / fisheye / SBS toujours disponible, choix retenu par vidéo). Mesuré au casque : dès que la fiche déclare screenType/stereoMode, DeoVR cache son sélecteur de mode (FLAT/180/360/fisheye). "declare" = toujours déclarer (image juste d'emblée, pas de menu) ; "free" = ne jamais déclarer (menu présent, image côte à côte brute jusqu'à votre choix, DeoVR le retient par film) ; "auto" = déclarer seulement si le titre/flux dit le format
   loaderTextScale: +file.loaderTextScale > 0 ? +file.loaderTextScale : 1,   // taille du texte de l'écran de chargement en VR (1 = défaut ; 0.7 plus petit, 1.3 plus grand)
   minFreeCriticalGB: file.minFreeCriticalGB ?? 1,  // disque : les clics sont toujours acceptés ; sous ce seuil (dernier moment) les téléchargements sont arrêtés, les fichiers temporaires supprimés et les nouveaux clics refusés avec un message (Stremio plante sinon)
   coursSlots: file.coursSlots ?? 6,                // onglet « En cours » : nombre d'emplacements fixes (DeoVR ne redemande la bibliothèque qu'en entrant sur le site, mais il relit la fiche de chaque film à chaque affichage de la liste)

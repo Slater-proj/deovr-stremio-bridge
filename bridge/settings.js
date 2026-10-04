@@ -5,7 +5,7 @@ const fs = require('fs');
 const DEFAULTS = {
   _aide: 'Réglages du pont DeoVR-Stremio. Modifiez une valeur puis relancez le pont. Supprimez ce fichier pour revenir aux valeurs par défaut. Liste complète des options : docs/CONFIGURATION.md sur https://github.com/Slater-proj/deovr-stremio-bridge',
   port: 4477,                                   // adresse à taper dans DeoVR : http://localhost:<port>
-  bindHost: '0.0.0.0',                          // "127.0.0.1" = uniquement ce PC (plus sûr) ; "0.0.0.0" = aussi le casque autonome / le réseau local
+  bindHost: '127.0.0.1',                        // "127.0.0.1" = uniquement ce PC (PCVR, plus sûr) ; "0.0.0.0" = aussi un casque autonome / le réseau local (sans authentification)
   platform: 'windows',                          // "windows" (DeoVR PC) ou "quest" (casque autonome : MKV/AV1/VP9 acceptés)
   vrOnly: true,                                 // true = seulement les films VR/3D ; false = tous les films des catalogues
   localDirs: [],                                // dossiers de vidéos supplémentaires, ex. ["D:\\VR"] (onglet « Local ») ; le dossier « videos » à côté de l'exe est lu d'office
@@ -15,7 +15,7 @@ const DEFAULTS = {
   sampleMinutes: 2,                             // mode échantillon : durée de chaque extrait (minutes)
   localStremio: 'http://127.0.0.1:11470',       // serveur de streaming de l'application Stremio
   maxDownloads: 3,                              // films téléchargés en même temps
-  formatMenu: 'auto',                           // "auto" : format déclaré seulement s'il est lu dans le titre (sinon le menu FLAT/180/360 de DeoVR reste disponible) ; "declare" : toujours déclaré (pas de menu) ; "free" : jamais déclaré (menu toujours là)
+  formatMenu: 'free',                           // "free" : le menu FLAT / 180 / 360 / fisheye / SBS de DeoVR est toujours là (image brute jusqu'à votre choix, retenu par vidéo) ; "auto" : format déclaré (image juste, pas de menu) quand le titre l'indique ; "declare" : toujours déclaré
   startMode: 'rapide',                          // "rapide" : le film démarre dès 20 s de tampon (pauses possibles si le débit manque) ; "sans-coupure" : attend assez d'avance pour ne jamais s'arrêter
   loaderTextScale: 1,                           // taille du texte de l'écran de chargement en VR (0.7 = plus petit, 1.3 = plus grand)
   holdMinutes: 30,                              // un film quitté reste actif (téléchargement) ce nombre de minutes

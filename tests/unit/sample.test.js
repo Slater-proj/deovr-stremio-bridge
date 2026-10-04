@@ -53,5 +53,6 @@ test('vidéo locale sans indice VR dans son nom : format du réglage localDefaul
 
 test('réglages par défaut : mode échantillon éteint, 3 extraits de 2 min, dossier « videos » lu d\'office', () => {
   assert.equal(L.cfg.sampleMode, false); assert.equal(L.cfg.sampleCount, 3); assert.equal(L.cfg.sampleMinutes, 2); assert.equal(L.cfg.localFolder, true);
+  assert.equal(L.cfg.formatMenu, 'free', 'menu FLAT/180/360 toujours disponible par défaut'); assert.equal(L.cfg.bindHost, '127.0.0.1', 'pas visible du réseau par défaut'); assert.equal(L.cfg.testScene, false, 'Test pont seulement en mode développeur');
   assert.ok(L.cfg.localDirs.includes(L.cfg.videosDir)); assert.match(L.cfg.videosDir, /videos$/);
 });

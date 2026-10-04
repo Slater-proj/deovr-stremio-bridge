@@ -28,11 +28,15 @@ Designed on a Pimax Dream Air + RTX 4090; any PCVR headset running DeoVR for Win
 - **Native DeoVR library** — type the bridge address in DeoVR's browser and get tabs: *En cours* (what you started), *Plus de seeds*, *Nouveautés*, one tab per Stremio catalogue, search, and a test tab. Thumbnails are 16:9 like DeoVR's own.
 - **Nothing downloads while you browse.** The download starts when you pick a film, continues for 30 minutes after you leave the player (configurable), runs for several films at once and resumes instead of restarting from zero.
 - **Honest loading screen** at every click: step, peers, MB received, real vs needed speed, buffer, ETA, and plain messages such as "not enough speed" or "no source". It switches to the film by itself once enough is buffered.
-- **VR declared correctly** — 180° dome, 360° sphere, fisheye or MKX200, side-by-side or top-bottom, detected from the catalogue, genre and title (`LR`, `TB`, `OU` included).
+- **You choose the mode for every video.** By default DeoVR's own FLAT / 180° / 360° / fisheye / SBS menu is always available (your choice is remembered per video; the picture is raw side-by-side until you pick). Prefer a correct picture straight away? `"formatMenu": "auto"` declares the format when the title says it (180°, 360°, fisheye or MKX200, side-by-side or top-bottom; `LR`, `TB`, `OU` included) — DeoVR then hides its menu.
+- **Local tab**: drop videos downloaded elsewhere into the `videos` folder next to the exe; they appear in DeoVR's *Local* tab and play in full.
+- **Preview mode** (`"sampleMode": true`): instead of downloading a whole film, fetch only a few excerpts (start, middle, end — count and length configurable) to get a quick preview of a film that would take hours.
+- **Seeking into a part not downloaded yet** no longer freezes the player: after 5 s the bridge answers an error and preloads that zone, so a second try works (DeoVR has no way to show the downloaded ranges; `/status.json` lists them).
 - **Stable status badges** in titles: `[S12] Title`, `[EN COURS 18 % · 1,4 Mo/s]`, `[PRÊT · 8 min en tampon]`, `[BLOQUÉ · 0 pair]` — identical in the list and the film page.
 - **Built to keep running**: ffmpeg is restarted at the right position if it crashes, watched segments are trimmed when the disk gets full, the Stremio cache size is checked, a clear message appears if Stremio isn't running, and `start.bat` (Node.js variant) restarts the bridge if it stops.
 - **Portable, no installation**: one `DeoVR-Stremio-Bridge.exe` with Node.js and ffmpeg inside the zip; everything it writes stays in a `data\` folder next to it. Delete the folder and it is gone.
 - **Your Stremio password is never stored.** You sign in once on a local page (`/setup`, reachable from the PC only); the bridge keeps a session key encrypted with Windows DPAPI.
+- **Troubleshooting made easy**: `bridge-events.log` summarises a session (player requests, seeks, DeoVR relaunches with memory and disk at that moment, disk alerts) and comes first in the support report.
 - **Developer mode** (`--dev` / `utility\LANCER-MODE-DEV.bat` in the debug zip): detailed console log, ffmpeg output, a `/dev` page, and `--report` (`utility\RAPPORT-SUPPORT.bat`) which writes a support report (secrets masked) with everything needed to debug.
 - **Diagnostics included**: `--diagnose`, a support report, per-click logs, a per-film summary, `/status` and `/debug/downloads`.
 
@@ -83,7 +87,7 @@ Stremio has no OAuth, so the only way to get a session is e-mail + password. The
 | Covered by automated tests (CI, with mocks) | Still needs a real headset to be confirmed |
 |---|---|
 | library tabs and order, VR declaration, badges, search, 16:9 thumbnails | H.264 loading-screen → film HLS switch is confirmed on a headset; HEVC films need "back, then relaunch" (HEVC inside HLS-TS fails; direct MP4/MKV HEVC works) — more headset checks in the *Labo 1–16* tab |
-| click ⇒ download, loading screen ⇒ film, "En cours" tab | `deovr://` links opened from DeoVR's browser (page `/t`) |
+| click ⇒ download, loading screen ⇒ film, "En cours" tab | `deovr://` links start a NEW DeoVR instance in desktop mode (measured) — use them from the PC browser only; the seek guard (503 + preload), preview mode and the *Local* tab are new in 10.3 and not yet confirmed on a headset |
 | ffmpeg crash recovery, disk trimming, cache budget, Stremio-down message | real field names of Stremio's `/settings` and `stats.json` on every Stremio version |
 | films with 0 seeders never produce a fake film | accents and `·` rendering in DeoVR titles |
 | sign-in page and its protections, no password on disk, key persistence, log-out, legacy `config.json` migration | — |

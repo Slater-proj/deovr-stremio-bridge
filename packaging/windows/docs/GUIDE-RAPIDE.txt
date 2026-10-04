@@ -41,7 +41,7 @@ Rien a installer : tout est dans ce dossier. Supprimer le dossier supprime tout.
 4. REGLAGES : config.json (a cote de l'exe)
    Cree au premier lancement. Les principaux :
      port         adresse du pont (4477 par defaut ; changez-le si un autre logiciel l'utilise)
-     bindHost     "127.0.0.1" = seulement ce PC ; "0.0.0.0" = aussi un casque autonome / le reseau
+     bindHost     "127.0.0.1" (defaut) = seulement ce PC ; "0.0.0.0" = aussi un casque autonome / le reseau
      platform     "windows" (DeoVR PC) ou "quest" (casque autonome)
      vrOnly       true = seulement les films VR/3D ; false = tous les films des catalogues
      localDirs    dossiers de videos supplementaires, ex. ["D:\\VR"]
@@ -49,9 +49,9 @@ Rien a installer : tout est dans ce dossier. Supprimer le dossier supprime tout.
                    ils apparaissent dans l'onglet "Local" de DeoVR)
      sampleMode   true = apercu : seulement des extraits du film (debut, milieu, fin)
      sampleCount  nombre d'extraits (3 par defaut) ; sampleMinutes : duree de chaque extrait
-     formatMenu   "auto" : le format VR est declare seulement s'il est lu dans le titre, sinon le menu FLAT/180/360
-                  de DeoVR est disponible (choisissez une fois, DeoVR s'en souvient) ; "declare" : toujours
-                  declare (image juste d'emblee, mais pas de menu) ; "free" : menu toujours disponible
+     formatMenu   "free" (defaut) : le menu FLAT/180/360/fisheye/SBS de DeoVR est toujours disponible (image brute
+                  jusqu'a votre choix, DeoVR s'en souvient par video) ; "auto" : format declare (image juste, pas
+                  de menu) quand le titre l'indique ; "declare" : toujours declare
      startMode    "rapide" (defaut) : le film demarre des 20 s de tampon, meme si le debit manque
                   (pauses possibles) ; "sans-coupure" : attend assez d'avance pour ne jamais s'arreter
      loaderTextScale  taille du texte de l'ecran de chargement en VR (1 par defaut ; 0.7 plus petit)

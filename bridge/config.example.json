@@ -18,7 +18,7 @@
   "scanAll": false,
   "scanConcurrency": 6,
   "scanMax": 100,
-  "testScene": true,
+  "testScene": false,
   "torrentStartMs": 120000,
   "debug": false,
   "hostConcurrency": 4,
@@ -44,7 +44,7 @@
   "loadingScreen": "always",
   "loadingCodec": "h264",
   "holdMinutes": 30,
-  "formatMenu": "auto",
+  "formatMenu": "free",
   "loaderTextScale": 1,
   "seekGuardSec": 5,
   "seekGuardMB": 20,
@@ -65,7 +65,7 @@
   "loaderMaxMin": 30,
   "patientMaxMin": 45,
   "landscapeThumbs": true,
-  "bindHost": "0.0.0.0",
+  "bindHost": "127.0.0.1",
   "minFreeGB": 15,
   "ffmpegRestarts": 3
 }

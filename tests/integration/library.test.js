@@ -174,3 +174,11 @@ test('vidéo locale sans indice VR dans le nom : le format n\'est PAS déclaré 
     } finally { await b.stop(); }
   }
 });
+
+test('par défaut (formatMenu "free") : aucune fiche ne déclare de format, même quand le titre le dit (3D SBS) : le menu FLAT/180/360/fisheye/SBS de DeoVR reste disponible', async () => {
+  const b = await startBridge(mocks, { formatMenu: undefined });
+  try {
+    const lib = await b.json('/deovr'), item = scene(lib, 'Films 3D').list[0], v = await b.json(new URL(item.video_url).pathname);
+    assert.equal(v.screenType, undefined); assert.equal(v.stereoMode, undefined); assert.equal(v.is3d, undefined); assert.ok(v.encodings);
+  } finally { await b.stop(); }
+});

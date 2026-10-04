@@ -4,6 +4,12 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+## [10.3.0] — 2026-10-04
+### Changé (préparation de la version grand public)
+- **`formatMenu` vaut `"free"` par défaut** : le menu FLAT / 180° / 360° / fisheye / SBS de DeoVR est toujours disponible pour chaque vidéo (films et onglet Local), même quand le titre ou le nom du fichier indique le format ; le choix est retenu par vidéo. Contrepartie mesurée : l'image arrive brute (côte à côte) jusqu'au choix. `"auto"` (image juste d'emblée, sans menu quand le format est lu) et `"declare"` restent disponibles.
+- **`bindHost` vaut `"127.0.0.1"` par défaut** (avant : `"0.0.0.0"`) : le pont, sans authentification, n'est plus visible du réseau local sauf choix explicite (casque autonome : `"0.0.0.0"`). Un `config.json` existant garde sa valeur.
+- **Onglet « Test pont » (Labos 1 à 16) seulement en mode développeur** (`--dev`, zip debug) ; `"testScene": true` le remet.
+
 ### Corrigé (6e test, nuit du 03 au 04/10 : analyse des journaux)
 Constats : (1) chaque relance de DeoVR suit de 3 à 4 s la fermeture, par le lecteur vidéo, d'une requête `Range` de saut restée sans réponse utile pendant ~7 s (7 cas sur 7 ; les sauts dans une zone déjà reçue, et les vidéos locales, ne relancent rien) ; (2) les liens `deovr://` (page `/t`, bouton de `/ui`) lancent une NOUVELLE instance de DeoVR en mode bureau : jusqu'à 10 relances en 5 s en cliquant, et le menu VR ne revient pas ; (3) une vidéo locale sans indice VR dans son nom était déclarée « plate », donc sans menu de format.
 - **Garde de saut** (`seekGuardSec` = 5, `seekGuardMB` = 20, `seekPrefetchMB` = 300) : un saut en cours de lecture dont Stremio n'envoie rien en 5 s reçoit tout de suite un **503** (au lieu de geler le lecteur jusqu'à sa renonciation à ~7 s, suivie de la relance de DeoVR) et la zone demandée est préchargée ; l'essai suivant trouve les données. Jamais appliqué à l'ouverture du fichier. `seekGuardSec: 0` le désactive. **À confirmer au casque** : on ignore comment DeoVR réagit à ce 503.

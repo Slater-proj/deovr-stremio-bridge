@@ -10,7 +10,7 @@ const ffmpegAvailable = () => { try { return cp.spawnSync('ffmpeg', ['-version']
 // opts : { login: true } -> pas d'ADDON_URLS : le pont passe par la (fausse) API du compte Stremio ; { dataDir } -> réutiliser un dossier (redémarrage) ; { env } -> variables en plus
 async function startBridge(mocks, config = {}, opts = {}) {
   const dataDir = opts.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-test-')), port = await freePort();
-  if (!opts.dataDir || opts.config !== false) fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ firstWaitMs: 1500, scanConcurrency: 3, ...config }));
+  if (!opts.dataDir || opts.config !== false) fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ firstWaitMs: 1500, scanConcurrency: 3, formatMenu: 'auto', testScene: true, ...config }));
   let out = '';
   const proc = cp.spawn(process.execPath, [path.join(root, 'bridge', 'server.js'), '--no-browser'], {
     env: { ...process.env, PORT: String(port), BRIDGE_DATA_DIR: dataDir, ...(opts.login ? { STREMIO_API: mocks.apiUrl } : { ADDON_URLS: mocks.addonUrl }), ...(opts.env || {}), LOCAL_STREMIO: mocks.stremioUrl, SCRAPE_TRACKERS: mocks.trackerHostPort, DNS_MODE: 'system', DEBUG: '1', BRIDGE_LAB_PREPARE: '0', ...(opts.env || {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
