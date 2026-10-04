@@ -30,12 +30,12 @@ describe('lecture : clic -> écran de chargement -> film', { skip: !HAS_FFMPEG &
     // emplacement fixe : même film, fiche résolue à la lecture, l'état est dans le titre
     assert.match(enCours.list[0].video_url, /\/video\/slot\/1\.json$/);
     const sv = await bridge.json(new URL(enCours.list[0].video_url).pathname);
-    assert.match(sv.title, /^\[(PRÊT|EN COURS)[^\]]*\] Film 1 /); assert.equal(sv.encodings[0].videoSources[0].url.includes('/live/'), true);
+    assert.match(sv.title, /^\[(PRÊT|EN COURS)[^\]]*\] Film 1 /); assert.match(sv.encodings[0].videoSources[0].url, /\/torrent\//, 'film lu en entier par le pont = entièrement dans le cache de Stremio : lecture directe, sans écran de chargement');
     assert.match(enCours.list[1].title, /Emplacement 2 · libre/, 'les autres emplacements restent libres');
   });
 
   test('repli : si le LECTEUR (NSPlayer) réclame la fiche comme flux, il est redirigé vers le flux ; un navigateur reçoit la fiche', async () => {
-    const lib = await bridge.json('/deovr'), path1 = new URL(lib.scenes[0].list[0].video_url).pathname;
+    const path1 = '/video/movie/mk4.json';   // un film pas encore lu (un film déjà complet est proposé en lecture directe)
     const r = await bridge.get(path1, { redirect: 'manual', headers: { 'user-agent': 'NSPlayer/12.00.26100.9549 WMFSDK/12.00.26100.9549', range: 'bytes=0-' } });
     assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /mpegurl/);   // playlist servie à l'adresse de la fiche (une redirection ne suffit pas : segments relatifs)
     const pl = await r.text(); assert.match(pl, /^#EXTM3U/); const segs = pl.split('\n').filter(l => l && !l.startsWith('#'));

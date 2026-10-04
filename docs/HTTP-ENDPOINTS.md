@@ -23,6 +23,7 @@ Flux (le clic démarre le téléchargement) :
 | `GET /proxy/<url>/<headers>/…` | proxy de flux HTTP |
 | `GET /thumb/<base64url(url)>.jpg[?b=<badge>&p=<0-100>]` | vignette 16:9 composée, avec badge (texte restreint) et barre d'avancement optionnels (repli : redirection vers l'image d'origine) |
 | `GET/POST /settings` | réglages (formulaire) ; **PC seulement**, jeton anti-CSRF |
+| `GET/POST /queue` | file de téléchargement (ajouter par identifiant, retirer) ; **PC seulement**, jeton anti-CSRF |
 | `GET /check`, `/check.json` | voyants de bon fonctionnement |
 | `GET /video/tool/<outil>.json`, `GET /tool/<outil>/run.mp4` | onglet Outils : la fiche ne fait rien ; l'action est exécutée quand le lecteur vidéo de DeoVR (UA NSPlayer, ce PC) ouvre `run.mp4` (outils : `etat`, `rapport`, `pause`, `nettoyer`, `echantillon`) |
 | `GET /test/<fichier>`, `/test/switch/{flat,sbs}/index.m3u8` | médias et test de bascule |

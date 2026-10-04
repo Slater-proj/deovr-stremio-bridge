@@ -82,7 +82,7 @@ table{border-collapse:collapse;width:100%}td{padding:8px 10px;border-bottom:1px 
 @media(max-width:640px){.f{grid-template-columns:1fr}}`;
 const shell = (title, body) => `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · Pont DeoVR</title><style>${CSS}</style><main>${body}</main></html>`;
 
-function create({ cfg, configFile, save, log, applyHot, checks }) {
+function create({ cfg, configFile, save, log, applyHot, checks, queue }) {
   const token = crypto.randomBytes(24).toString('hex'), fails = [];
   const page = (res, code, body, title = 'Réglages') => { res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-frame-options': 'DENY', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'" }); res.end(shell(title, body)); };
   const nav = '<p><a href="/ui">Bibliothèque web</a> · <a href="/check">Vérifications</a> · <a href="/status">Suivi</a> · <a href="/setup">Compte Stremio</a></p>';
@@ -129,6 +129,27 @@ function create({ cfg, configFile, save, log, applyHot, checks }) {
   }
   const fileHas = k => { try { return k in (JSON.parse(require('fs').readFileSync(configFile, 'utf8'))); } catch { return false; } };
 
+  const readBody = req => new Promise((ok, no) => { let b = ''; req.on('data', c => { b += c; if (b.length > 65536) { no(new Error('trop gros')); req.destroy(); } }); req.on('end', () => ok(b)); req.on('error', no); });
+  function queuePage(msg = '') {
+    const rows = queue.list().map(q => `<tr><td><b>${esc(q.titre)}</b></td><td>${esc(q.etat)}</td><td>${q.enFile ? `<form method="post" action="/queue"><input type="hidden" name="t" value="${token}"><input type="hidden" name="act" value="remove"><input type="hidden" name="key" value="${esc(q.key)}"><button style="margin:0;padding:4px 10px">Retirer</button></form>` : ''}</td></tr>`).join('');
+    return `<h1>File de téléchargement</h1>${nav}<p>Les films ajoutés ici (bouton ⬇ de la <a href="/ui">bibliothèque web</a>, ou l'outil « Télécharger en entier » de DeoVR) sont téléchargés <b>en entier</b> par Stremio sans lecteur, dans la limite de ${cfg.maxDownloads} à la fois. Une fois complets, ils se lisent directement : pas d'écran de chargement, sauts instantanés.</p>${msg}<form method="post" action="/queue"><input type="hidden" name="t" value="${token}"><input type="hidden" name="act" value="add"><p>Ajouter par identifiant (ex. tt1234567) : <input type="text" name="id" style="width:220px;display:inline" spellcheck="false"> <select name="type" style="width:110px;display:inline"><option>movie</option><option>series</option></select> <button style="margin:0;padding:6px 14px">Ajouter</button></p></form>${rows ? `<table>${rows}</table>` : '<p>Aucun film en file.</p>'}`;
+  }
+  async function handleQueue(req, res) {
+    if (!isLocal(req)) return page(res, 403, `<h1>Accès réservé à ce PC</h1><p>Ouvrez <b>http://localhost:${cfg.port}/queue</b> dans un navigateur sur le PC où tourne le pont.</p>`, 'File');
+    if (req.method === 'GET') return page(res, 200, queuePage(), 'File');
+    if (req.method !== 'POST') return page(res, 405, '<h1>Méthode non autorisée</h1>');
+    const origin = req.headers.origin; if (origin && origin !== 'null') { let ok = false; try { ok = hostOk(new URL(origin).host); } catch {} if (!ok) return page(res, 403, '<h1>Origine refusée</h1>'); }
+    let f; try { f = new URLSearchParams(await readBody(req)); } catch { return page(res, 400, '<h1>Requête invalide</h1>'); }
+    if (f.get('t') !== token) return page(res, 403, queuePage('<p class="err">Page expirée : rechargez-la et réessayez.</p>'), 'File');
+    const act = f.get('act'), id = String(f.get('id') || ''), type = String(f.get('type') || 'movie');
+    if (act === 'add') {
+      if (!/^[\w:.%~-]{1,120}$/.test(id) || !/^(movie|series)$/.test(type)) return page(res, 400, queuePage('<p class="err">Film non reconnu.</p>'), 'File');
+      try { const r = await queue.add(type, id); return page(res, 200, queuePage(r.deja ? '<p class="ok">Ce film est déjà entièrement téléchargé.</p>' : '<p class="ok">Ajouté à la file.</p>'), 'File'); }
+      catch (e) { return page(res, 200, queuePage(`<p class="err">Impossible d'ajouter ce film : ${esc(e.message)}</p>`), 'File'); }
+    }
+    if (act === 'remove') { queue.remove(String(f.get('key') || '')); return page(res, 200, queuePage('<p class="ok">Retiré de la file.</p>'), 'File'); }
+    return page(res, 400, queuePage('<p class="err">Action inconnue.</p>'), 'File');
+  }
   async function handleCheck(req, res, json) {
     const list = await checks();
     if (json) { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify(list, null, 2)); }
@@ -137,7 +158,7 @@ function create({ cfg, configFile, save, log, applyHot, checks }) {
     const rows = list.map(c => `<tr><td><span class="dot d-${esc(c.status)}"></span><b>${esc(c.label)}</b></td><td>${esc(c.detail)}${c.hint ? `<br><small class="warn">${esc(c.hint)}</small>` : ''}</td></tr>`).join('');
     return page(res, 200, `<h1>Vérifications</h1><p><a href="/ui">Bibliothèque web</a> · <a href="/settings">Réglages</a> · <a href="/check">Actualiser</a></p>${head}<table>${rows}</table><p>Cette page ne vérifie pas l'ouverture de port de votre routeur (le principal levier de vitesse des torrents) : voir docs/TROUBLESHOOTING.md.</p>`, 'Vérifications');
   }
-  return { handleSettings, handleCheck, token, SCHEMA };
+  return { handleSettings, handleCheck, handleQueue, token, SCHEMA };
 }
 
 module.exports = { create, parse, SCHEMA, isLocal };

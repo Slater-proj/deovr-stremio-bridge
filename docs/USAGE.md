@@ -41,6 +41,14 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 
 Jusqu'à `maxDownloads` (3) films sont actifs en même temps ; au-delà, le plus ancien est mis en pause. Si votre cache Stremio est petit, le pont réduit ce nombre.
 
+## Télécharger un film en entier sans le regarder (file d'attente)
+
+Les torrents lents ne se regardent pas bien en direct. Pour préparer une soirée :
+1. **Depuis le PC** : ouvrez `http://localhost:4477/ui`, cliquez le petit bouton ⬇ en haut à droite d'une affiche (ou collez un identifiant, ex. `tt1234567`, sur `http://localhost:4477/queue`).
+2. **Ou depuis la VR** : regardez l'aperçu (mode échantillon) puis lancez l'outil « Télécharger en entier les films en cours » dans l'onglet *Outils*.
+3. Le film est téléchargé en entier par Stremio, sans lecteur, `maxDownloads` à la fois (les films que vous regardez passent d'abord) ; la file survit à un redémarrage du pont. Suivi : `/queue`, onglet *En cours* (`[TÉLÉCHARGEMENT 18 % · 3,2/17,0 Go · 1,4 Mo/s · reste ~2 h]`).
+4. Une fois `[EN CACHE · COMPLET]`, lancez-le dans DeoVR : lecture directe immédiate, sauts instantanés.
+
 ## Réglages et vérifications (sur le PC)
 
 - `http://localhost:4477/settings` : tous les réglages courants dans un formulaire (inutile d'éditer `config.json`). Les réglages marqués « après redémarrage » (port, dossiers…) ne jouent qu'au prochain lancement.

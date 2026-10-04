@@ -70,7 +70,7 @@ describe('onglet Outils de DeoVR', { skip: !HAS_FFMPEG && 'ffmpeg absent' }, () 
 
   test('l\'onglet est avant « Test pont » ; la fiche d\'un outil ne fait RIEN (DeoVR lit toutes les fiches d\'une liste)', async () => {
     const lib = await bridge.json('/deovr'), names = lib.scenes.map(s => s.name); assert.ok(names.indexOf('Outils') > 0 && names.indexOf('Outils') < names.indexOf('Test pont'), names.join(','));
-    const tools = lib.scenes.find(s => s.name === 'Outils'); assert.equal(tools.list.length, 5);
+    const tools = lib.scenes.find(s => s.name === 'Outils'); assert.equal(tools.list.length, 6);
     for (const it of tools.list) { const v = await bridge.json(new URL(it.video_url).pathname); assert.match(v.encodings[0].videoSources[0].url, /\/tool\/\w+\/run\.mp4$/); }
     assert.ok(!/outil « /.test(bridge.out()), 'aucune action exécutée par les fiches');
   });

@@ -5,6 +5,7 @@
 const TOOLS = [
   { key: 'etat', title: 'Outils · État du pont (disque, Stremio, téléchargements)' },
   { key: 'rapport', title: 'Outils · Générer le rapport d\'assistance' },
+  { key: 'epingler', title: 'Outils · Télécharger en entier les films en cours' },
   { key: 'pause', title: 'Outils · Mettre tous les téléchargements en pause' },
   { key: 'nettoyer', title: 'Outils · Vider les fichiers temporaires' },
   { key: 'echantillon', title: 'Outils · Mode échantillon : activer / désactiver' },

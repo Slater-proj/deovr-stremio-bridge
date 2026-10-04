@@ -35,6 +35,11 @@ Modifier → `npm run check && npm test` → push → la CI teste sous Windows, 
 - Fiche vidéo : déclarer `screenType`/`stereoMode`/`is3d` supprime le sélecteur de mode de DeoVR (mesuré) → réglage `formatMenu`. Un redirect 302 vers une playlist HLS ne marche pas (segments relatifs) : servir la playlist avec des URL absolues.
 - Disque : `diskWatch` arrête les téléchargements sous `minFreeCriticalGB`.
 - « En cours » = emplacements fixes `/video/slot/<n>.json` (DeoVR ne redemande pas `/deovr`). NSPlayer qui réclame une fiche JSON reçoit la playlist à cette adresse, segments en URL absolues (mesuré : passe, Labo 6) ; un fichier direct est redirigé (302).
+- Onglet *Outils* : DeoVR lit la fiche de TOUTES les entrées d'une liste à l'affichage → la fiche ne doit jamais exécuter d'action ; l'action part quand le LECTEUR (UA NSPlayer, loopback) ouvre `/tool/<x>/run.mp4`.
+- Les minuteries qui AGISSENT (file de téléchargement `queueTick`…) se lancent dans `start()`, jamais au chargement du module (`--report` / `--diagnose` chargent `lib.js` pendant que le pont tourne).
+- File de téléchargement : `D.pinned` (persisté dans `bridge-state.json`) = téléchargement complet sans lecteur ; `dlTick` ne le met pas en pause après `holdMinutes`, `dlActivate` le sacrifie en dernier, `queueTick` le reprend. Film complet (`D.bgDone`) → fiche en lecture directe, sans écran de chargement.
+- Les liens `deovr://` lancent une NOUVELLE instance de DeoVR en mode bureau (mesuré) : ne jamais en mettre dans une page destinée au casque.
+- Journaux à lire en premier après un test : `bridge-events.log` (une ligne JSON par fait : lecteur, sauts, relances de DeoVR avec mémoire / disque) puis `bridge-bilans.log`.
 - Les fichiers `.git/index.lock` laissés par un outil externe bloquent git : les supprimer à la main.
 - Dépôt ouvert depuis un partage réseau (`\\serveur\…`) : `node --test` n'y trouve pas les fichiers et `npm` (cmd) refuse les chemins UNC → copier le dépôt sur un disque local pour lancer `node scripts/run-tests.js`. Les tests fixent `BRIDGE_LAB_PREPARE=0` (banc de test fabriqué au premier clic seulement : pas d'encodage HEVC dans chaque pont lancé).
 - Pas de commentaire `//` inséré au milieu d'une ligne de code par un `sed` : il met en commentaire la fin de la ligne (arrivé sur `server.listen(...)`). Toujours `node --check` après une édition en ligne de commande.

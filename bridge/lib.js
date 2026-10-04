@@ -918,6 +918,7 @@ function prewarm(url, ms = 120000) {   // diagnostic uniquement (measureTorrent)
     .then(r => { log('debug', `prewarm torrent -> ${r.status}`); r.body && r.body.cancel().catch(() => {}); })
     .catch(e => log('warn', `prewarm torrent : ${e.message}`));
 }
+const bestKey = new Map();   // id film -> clé "hash:idx" de la source torrent la mieux classée à la dernière fiche (file d'attente de téléchargement)
 buildVideo.seen = new Map();
 const v0title = (a, id) => (a.meta && a.meta.name) || id;
 const hashFilm = new Map();   // hash -> id du film
@@ -932,6 +933,7 @@ async function buildVideo(type, id, base, reqHost, platform, ua) {
   const ordered = [...okFirst, ...weak];
   const name = a.meta.name || id, poster = a.meta.background || a.meta.poster || '', runtime = parseRuntime(a.meta.runtime);
   const liveOk = ffmpegOk && cfg.loadingScreen !== 'off';
+  { const t0 = ordered.find(o => o.kind === 'torrent'); if (t0) bestKey.set(id, `${t0.raw.infoHash.toLowerCase()}:${Number.isInteger(t0.raw.fileIdx) ? t0.raw.fileIdx : -1}`); }
   for (const o of ordered) if (o.kind === 'torrent') {
     const hh = o.raw.infoHash.toLowerCase(), ix = Number.isInteger(o.raw.fileIdx) ? o.raw.fileIdx : -1, key = `${hh}:${ix}`;
     hashFilm.set(hh, id);
@@ -942,7 +944,9 @@ async function buildVideo(type, id, base, reqHost, platform, ua) {
     const D = dls.get(key); if (D) Object.assign(D, { title: name, poster: poster || D.poster, runtime: runtime || D.runtime, directOk, mkv: !!o.remuxed });
     // chaque clic sur un torrent passe par l'écran de chargement (sauf codec que DeoVR PC ne sait pas lire)
     const ready = D && D.live && !D.live.closed && D.live.realReady;
-    if (ready && D.live.direct && (directOk || o.remuxed)) { o.live = false; o.direct = true; if (o.remuxed) o.url = `${base}/torrent/${hh}/${ix}/video.mkv`; }   // HEVC en MKV : lecture directe du MKV (Labo 9 : passe au casque ; le HEVC dans un flux HLS TS ne passe pas)   // film HEVC déjà en tampon : le lecteur lit le fichier directement (comme avant l'écran de chargement), il démarre aussitôt
+    const complete = !!(D && (D.bgDone || (D.size && D.maxPos >= D.size - 1)));   // film entièrement reçu par Stremio
+    if (complete && directOk && !o.remuxed) { o.live = false; o.direct = true; }   // aucun écran de chargement : lecture directe immédiate, sauts instantanés
+    else if (ready && D.live.direct && (directOk || o.remuxed)) { o.live = false; o.direct = true; if (o.remuxed) o.url = `${base}/torrent/${hh}/${ix}/video.mkv`; }   // HEVC en MKV : lecture directe du MKV (Labo 9 : passe au casque ; le HEVC dans un flux HLS TS ne passe pas)   // film HEVC déjà en tampon : le lecteur lit le fichier directement (comme avant l'écran de chargement), il démarre aussitôt
     else if (liveOk && o.platformOk !== false && (cfg.loadingScreen === 'always' || o.remuxed || !ready)) {
       o.url = `${base}/live/${hh}/${ix}/index.m3u8`; o.live = true; o.platformOk = true;
     }
@@ -1070,16 +1074,35 @@ function dlEpisode(D, what, req) {   // un « clic » = un nouvel épisode de le
 function dlActivate(D) {
   if (disk.critical) { if (!D.diskBlocked || Date.now() - D.diskBlocked > 60000) { D.diskBlocked = Date.now(); dlLog(D, 'warn', `disque presque plein (${disk.freeGB} Go libres sur le ${disk.where}) : téléchargement refusé tant que la place n'est pas libérée`); } return; }
   D.diskBlocked = 0;
-  const act = [...dls.values()].filter(x => x.active && x !== D).sort((a, b) => a.lastPlayer - b.lastPlayer);
+  const act = [...dls.values()].filter(x => x.active && x !== D).sort((a, b) => (a.pinned ? 1 : 0) - (b.pinned ? 1 : 0) || a.lastPlayer - b.lastPlayer);   // les téléchargements en file passent après les films regardés
   while (act.length >= cfg.maxDownloads) dlPause(act.shift(), `limite de ${cfg.maxDownloads} téléchargements simultanés (le plus ancien est mis en pause)`);
   if (cacheInfo.sizeBytes && D.size) {   // cache Stremio petit : pas plus de films en parallèle que le cache ne peut en contenir (sinon Stremio efface ce qu'il vient de télécharger)
     const gb = Math.round(cacheInfo.sizeBytes / 1e9), others = [...dls.values()].filter(x => x.active && x !== D && x.size).sort((a, b) => a.lastPlayer - b.lastPlayer);
     while (others.length && others.reduce((t, x) => t + x.size, D.size) > cacheInfo.sizeBytes) dlPause(others.shift(), `cache Stremio de ${gb} Go trop petit pour garder plusieurs films à la fois (augmentez-le dans Stremio > Paramètres > Streaming)`);
   }
   D.active = true; D.activatedAt = Date.now(); D.samples = []; D.reads = []; D.bgStop = false; D.noDataLogged = false; D.firstData = 0; delete D.pausedWhy;
-  dlLog(D, 'info', `téléchargement démarré (${[...dls.values()].filter(x => x.active).length}/${cfg.maxDownloads} actifs) — gardé ${cfg.holdMinutes} min après la dernière activité du lecteur`);
+  dlLog(D, 'info', `téléchargement démarré (${[...dls.values()].filter(x => x.active).length}/${cfg.maxDownloads} actifs) — ${D.pinned ? 'téléchargement COMPLET demandé (file d\'attente) : continue sans lecteur jusqu\'au bout' : 'gardé ' + cfg.holdMinutes + ' min après la dernière activité du lecteur'}`);
   torrentCreate(D.hash, 'clic').catch(() => {});
-  libMemo.clear(); bgLoop(D); if (cfg.sampleMode) sampleLoop(D); dlSave();
+  libMemo.clear(); bgLoop(D); if (cfg.sampleMode && !D.pinned) sampleLoop(D); dlSave();
+}
+// ----- file d'attente : « télécharger en entier » sans regarder (aperçu -> décision -> téléchargement la nuit -> lecture directe, sauts instantanés) -----
+async function queueAdd(type, id) {
+  const base = `http://127.0.0.1:${selfPort}`;
+  await buildVideo(type, id, base, '', cfg.platform, 'file-attente');   // analyse du film (addons + trackers) : pose les informations et choisit la meilleure source
+  const key = bestKey.get(id); if (!key) throw new Error('aucune source torrent pour ce film');
+  const [hash, idx] = key.split(':'); let D = dls.get(key);
+  if (!D) { D = newDl(key, hash, idx); dls.set(key, D); dlByFilm.set(D.id, D); }
+  if (D.bgDone) return { D, deja: true };
+  D.pinned = true; D.pinnedAt = D.pinnedAt || Date.now(); D.lastPlayer = Math.max(D.lastPlayer || 0, Date.now());
+  dlLog(D, 'info', 'ajouté à la file de téléchargement (complet)'); saveT = 0; dlSave(); queueTick();
+  return { D };
+}
+function queueRemove(key) { const D = dls.get(key); if (!D) return false; D.pinned = false; saveT = 0; dlSave(); if (D.active && Date.now() - D.lastPlayer > cfg.holdMinutes * 60000) dlPause(D, 'retiré de la file de téléchargement'); return true; }
+const queueList = () => [...dls.values()].filter(D => D.pinned || D.completedAt).sort((a, b) => (a.pinnedAt || a.completedAt || 0) - (b.pinnedAt || b.completedAt || 0)).map(D => ({ key: D.key, titre: D.title, etat: dlState(D).label, enFile: !!D.pinned, complet: !!D.bgDone }));
+function queueTick() {   // reprend, dans l'ordre, les téléchargements en file quand une place est libre (au démarrage, après un arrêt, quand un film regardé se termine)
+  if (disk.critical || stremioDown) return;
+  let n = [...dls.values()].filter(D => D.active).length;
+  for (const D of [...dls.values()].filter(x => x.pinned && !x.bgDone && !x.active && !/^disque/.test(x.pausedWhy || '')).sort((a, b) => (a.pinnedAt || 0) - (b.pinnedAt || 0))) { if (n >= cfg.maxDownloads) break; dlActivate(D); if (D.active) n++; }
 }
 function dlPause(D, why) {
   if (!D.active) return;
@@ -1096,8 +1119,9 @@ function dlState(D) {   // { code, label (court, ASCII+Latin-1 : affiché dans l
   const now = Date.now(), age = now - (D.activatedAt || now), sp = D.speed || 0, s = D.live;
   if (!D.active && /^disque/.test(D.pausedWhy || '')) return { code: 'pause', label: 'ARRÊTÉ · disque plein', cls: 'r' };
   if (!D.active && isClickDead(D.id)) return { code: 'pause', label: 'ÉCHEC · aucune donnée', cls: 'k' };
+  if (!D.active && D.pinned && !D.bgDone) return { code: 'queued', label: 'EN ATTENTE · file de téléchargement', cls: 'o' };
   if (!D.active) return { code: 'pause', label: D.bgDone ? 'EN CACHE · COMPLET' : 'PAUSE · reprise au clic', cls: 'b' };
-  if (cfg.sampleMode && D.sample && D.sample.plan.length) {
+  if (cfg.sampleMode && !D.pinned && D.sample && D.sample.plan.length) {
     const done = D.sample.plan.filter(r => r.done).length, n = D.sample.n, rdy = !!(s && !s.closed && s.realReady);
     return done >= n ? { code: 'ready', label: `ÉCHANTILLONS PRÊTS · ${n} × ${cfg.sampleMinutes} min`, cls: 'g' } : { code: 'sample', label: `ÉCHANTILLONS ${done}/${n}${rdy ? ' · PRÊT, relancez' : ''}${sp > 5e4 ? ' · ' + mbs(sp) : ''}`, cls: rdy ? 'g' : 'o' };
   }
@@ -1109,11 +1133,11 @@ function dlState(D) {   // { code, label (court, ASCII+Latin-1 : affiché dans l
   const pct = Math.round(100 * (D.progress || 0));
   const gb = x => (x / 1e9).toFixed(1).replace('.', ','), left = D.size && sp > 5e4 ? Math.max(0, 1 - (D.progress || 0)) * D.size / sp : 0;   // « 3,2/17,0 Go · 1,4 Mo/s · reste ~2,1 h »
   const eta = left > 0 ? ` · reste ~${left >= 5400 ? (left / 3600).toFixed(1).replace('.', ',') + ' h' : fmtDur(left)}` : '';
-  return { code: 'dl', label: `EN COURS ${pct} %${D.size ? ` · ${gb((D.progress || 0) * D.size)}/${gb(D.size)} Go` : ''}${sp > 5e4 ? ' · ' + mbs(sp) + eta : ''}`, cls: D.need && sp && sp < D.need * 0.8 ? 'o' : 'g' };
+  return { code: 'dl', label: `${D.pinned ? 'TÉLÉCHARGEMENT' : 'EN COURS'} ${pct} %${D.size ? ` · ${gb((D.progress || 0) * D.size)}/${gb(D.size)} Go` : ''}${sp > 5e4 ? ' · ' + mbs(sp) + eta : ''}`, cls: D.need && sp && sp < D.need * 0.8 ? 'o' : 'g' };
 }
 async function dlTick(D) {
   const now = Date.now();
-  if (now - D.lastPlayer > cfg.holdMinutes * 60000) return dlPause(D, `${cfg.holdMinutes} min sans activité du lecteur`);
+  if (!D.pinned && now - D.lastPlayer > cfg.holdMinutes * 60000) return dlPause(D, `${cfg.holdMinutes} min sans activité du lecteur`);
   const st = await torrentStats(D.hash, D.idx).catch(() => null);
   if (!D.active) return;
   if (st) {
@@ -1144,7 +1168,7 @@ setInterval(() => {
   const now = Date.now();
   Promise.all([...dls.values()].filter(D => D.active && !D.ticking).map(D => { D.ticking = true; return dlTick(D).catch(e => log('warn', `suivi ${D.hash.slice(0, 8)} : ${e.message}`)).finally(() => { D.ticking = false; }); })).catch(() => {});
   for (const D of dls.values()) if (D.cur && !D.cur.bilanDone && now - D.cur.lastT > 45000) dlBilan(D, 'le lecteur ne demande plus rien depuis 45 s');
-  for (const [k, D] of dls) if (!D.active && now - D.lastPlayer > 24 * 3600000) { dls.delete(k); if (dlByFilm.get(D.id) === D) dlByFilm.delete(D.id); }
+  for (const [k, D] of dls) if (!D.active && !D.pinned && now - D.lastPlayer > 24 * 3600000) { dls.delete(k); if (dlByFilm.get(D.id) === D) dlByFilm.delete(D.id); }
 }, 1500).unref();
 function dlBilan(D, why) {   // une ligne de bilan par épisode : lu / quitté puis repris / abandonné par DeoVR après X s / aucune donnée
   const e = D.cur; if (!e || e.bilanDone) return; e.bilanDone = true;
@@ -1163,16 +1187,16 @@ function dlBilan(D, why) {   // une ligne de bilan par épisode : lu / quitté p
 let saveT = 0;
 function dlSave() {
   if (Date.now() - saveT < 3000) return; saveT = Date.now();
-  try { fs.writeFileSync(STATE_FILE, JSON.stringify([...dls.values()].map(D => ({ key: D.key, hash: D.hash, idx: D.idx, id: D.id, type: D.type, title: D.title, poster: D.poster, runtime: D.runtime, screen: D.screen, stereo: D.stereo, res: D.res, vrWhy: D.vrWhy, fmtReason: D.fmtReason, size: D.size, need: D.need, lastPlayer: D.lastPlayer, bgDone: D.bgDone })))); } catch {}
+  try { fs.writeFileSync(STATE_FILE, JSON.stringify([...dls.values()].map(D => ({ key: D.key, hash: D.hash, idx: D.idx, id: D.id, type: D.type, title: D.title, poster: D.poster, runtime: D.runtime, screen: D.screen, stereo: D.stereo, res: D.res, vrWhy: D.vrWhy, fmtReason: D.fmtReason, size: D.size, need: D.need, lastPlayer: D.lastPlayer, bgDone: D.bgDone, pinned: D.pinned, pinnedAt: D.pinnedAt })))); } catch {}
 }
 setInterval(() => { if (dls.size) { saveT = 0; dlSave(); } }, 30000).unref();
 try {   // liste « En cours » retrouvée après un redémarrage du pont (films en pause, reprise au clic)
-  for (const x of JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))) if (Date.now() - x.lastPlayer < 24 * 3600000) { const D = newDl(x.key, x.hash, x.idx); Object.assign(D, x, { active: false, timeline: [], samples: [], reads: [], episodes: [] }); dls.set(x.key, D); dlByFilm.set(D.id, D); }
+  for (const x of JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))) if (Date.now() - x.lastPlayer < 24 * 3600000 || x.pinned) { const D = newDl(x.key, x.hash, x.idx); Object.assign(D, x, { active: false, timeline: [], samples: [], reads: [], episodes: [] }); dls.set(x.key, D); dlByFilm.set(D.id, D); }
 } catch {}
 
 // ----- téléchargement de fond : continue de lire le film (en jetant les octets) tant que le lecteur ne le fait pas -----
 function bgWanted(D) {
-  if (!D.active || D.bgDone || D.bgStop || cfg.sampleMode) return false;   // mode échantillon : pas de téléchargement séquentiel, sampleLoop() ne lit que des extraits
+  if (!D.active || D.bgDone || D.bgStop || (cfg.sampleMode && !D.pinned)) return false;   // mode échantillon : pas de téléchargement séquentiel, sampleLoop() ne lit que des extraits
   if (Date.now() - (D.directT || 0) < 8000) return false;                 // lecture directe en cours : c'est elle qui télécharge
   const s = D.live;
   if (s && !s.closed && !s.realFail) return s.realDone || s.gated || (s.feedActive === 0 && Date.now() - s.t0 > 4000);   // ffmpeg est en pause (assez d'avance) ou inactif
@@ -1200,7 +1224,10 @@ async function bgLoop(D) {
         }
       } catch {}
       if (D.size && D.bgPos >= D.size - 1) D.bgDone = true;
-      if (D.bgDone) dlLog(D, 'info', 'fichier entièrement reçu par le serveur Stremio (en cache)');
+      if (D.bgDone) {
+        dlLog(D, 'info', 'fichier entièrement reçu par le serveur Stremio (en cache)'); libMemo.clear(); vidInvalidate(D.id);   // la prochaine fiche propose la lecture directe
+        if (D.pinned) { D.pinned = false; D.completedAt = Date.now(); evt('telechargement-complet', { film: D.title, Go: D.size ? +(D.size / 1e9).toFixed(1) : null, duree_min: Math.round((Date.now() - (D.pinnedAt || D.activatedAt || Date.now())) / 60000) }); }
+      }
       else await sleepMs(500);
     }
   } finally { D.bgRunning = false; }
@@ -1677,7 +1704,7 @@ setInterval(() => {   // nettoyage : une session de chargement sans activité du
 process.on('exit', () => { for (const s of liveSessions.values()) { try { s.proc.kill(); } catch {} try { fs.rmSync(s.dir, { recursive: true, force: true }); } catch {} } });
 function liveData() { return [...liveSessions.values()].map(s => ({ film: s.D.title, ffmpegPid: s.proc && s.proc.pid || null, relances: s.restarts || 0, segmentsSupprimes: s.trim || 0, disqueLibreGo: s.freeGB ?? null, depuis_s: Math.round((Date.now() - s.t0) / 1000), filmPret: s.realReady, tampon_s: Math.round(s.producedSec || 0), cible_s: s.T, avance_s: Math.round(aheadSec(s)), ffmpegEnPause: s.gated, segmentsReels: s.realSegs.length, chargementAffiche: s.shown, playlists: s.plCount, codec: s.codec, pairs: s.D.peers, recu_Mo: +(Math.max(s.D.readBytes, s.D.netBytes) / 1e6).toFixed(1), debit_MoS: +(s.D.speed / 1e6).toFixed(2) })); }
 function dlData(full) {
-  return dlSorted().map(D => { const st = dlState(D); return { film: D.title, id: D.id, etat: st.label, actif: D.active, clics: D.clicks, format: `${D.screen || '?'}/${D.stereo || '?'}`, raisonVR: D.vrWhy || null, raisonFormat: D.fmtReason || null, pairs: D.peers, reçu_Mo: +(Math.max(D.readBytes, D.netBytes) / 1e6).toFixed(1), debit_MoS: +((D.speed || 0) / 1e6).toFixed(2), necessaire_MoS: D.need ? +(D.need / 1e6).toFixed(2) : null, progression: Math.round(100 * (D.progress || 0)) + ' %', tailleFichier_Mo: D.size ? Math.round(D.size / 1e6) : null, tampon_s: D.live ? Math.round(D.live.producedSec || 0) : null, dernierLecteur_ilYa_s: Math.round((Date.now() - D.lastPlayer) / 1000), disponible: haveText(D) || null, ...(D.sample ? { echantillons: `${D.sample.plan.filter(r => r.done).length}/${D.sample.n}` } : {}), arret: D.pausedWhy || null, ...(full ? { chronologie: D.timeline } : {}) }; });
+  return dlSorted().map(D => { const st = dlState(D); return { film: D.title, id: D.id, etat: st.label, actif: D.active, enFile: !!D.pinned, clics: D.clicks, format: `${D.screen || '?'}/${D.stereo || '?'}`, raisonVR: D.vrWhy || null, raisonFormat: D.fmtReason || null, pairs: D.peers, reçu_Mo: +(Math.max(D.readBytes, D.netBytes) / 1e6).toFixed(1), debit_MoS: +((D.speed || 0) / 1e6).toFixed(2), necessaire_MoS: D.need ? +(D.need / 1e6).toFixed(2) : null, progression: Math.round(100 * (D.progress || 0)) + ' %', tailleFichier_Mo: D.size ? Math.round(D.size / 1e6) : null, tampon_s: D.live ? Math.round(D.live.producedSec || 0) : null, dernierLecteur_ilYa_s: Math.round((Date.now() - D.lastPlayer) / 1000), disponible: haveText(D) || null, ...(D.sample ? { echantillons: `${D.sample.plan.filter(r => r.done).length}/${D.sample.n}` } : {}), arret: D.pausedWhy || null, ...(full ? { chronologie: D.timeline } : {}) }; });
 }
 // ----- Stremio : déclaration du torrent -----
 async function torrentCreate(hash, why = 'clic') {   // comme l'appli Stremio : déclare le torrent avec une recherche de pairs large (sources addon + publiques + DHT)
@@ -1741,7 +1768,7 @@ async function pipeUpstream(req, res, url, headers = {}, firstByteMs = 0, track 
       const st = relayState.get(track.hash) || {}; const cr = /bytes (\d+)-\d+\/(\d+)/.exec(out['content-range'] || '');
       st.idx = track.idx; st.lastStart = cr ? +cr[1] : 0; st.size = cr ? +cr[2] : (+out['content-length'] || st.size || 0); st.rate = st.rate || []; relayState.set(track.hash, st);
       let cpos = cr ? +cr[1] : 0; const w = res.write.bind(res);
-      res.write = (c, ...a) => { if (Dl) { const n = c.length || 0; addRead(Dl, n, 'direct', cpos); cpos += n; Dl.directPos = cpos; if (cfg.readAheadMB > 0 && !cfg.sampleMode && !Dl.aheadRunning) aheadLoop(Dl); if (Dl.cur) { Dl.cur.direct += n; Dl.cur.lastT = Date.now(); } Dl.directT = Date.now(); Dl.lastPlayer = Date.now(); } st.served = (st.served || 0) + (c.length || 0); st.rate.push([Date.now(), c.length || 0]); if (st.rate.length > 400) st.rate.shift(); return w(c, ...a); };
+      res.write = (c, ...a) => { if (Dl) { const n = c.length || 0; addRead(Dl, n, 'direct', cpos); cpos += n; Dl.directPos = cpos; if (cfg.readAheadMB > 0 && !(cfg.sampleMode && !Dl.pinned) && !Dl.aheadRunning) aheadLoop(Dl); if (Dl.cur) { Dl.cur.direct += n; Dl.cur.lastT = Date.now(); } Dl.directT = Date.now(); Dl.lastPlayer = Date.now(); } st.served = (st.served || 0) + (c.length || 0); st.rate.push([Date.now(), c.length || 0]); if (st.rate.length > 400) st.rate.shift(); return w(c, ...a); };
     }
     if (req.method === 'HEAD' || !r.body) return res.end();
     const rs = rs0 || Readable.fromWeb(r.body);
@@ -1823,7 +1850,7 @@ const UI_CSS = `body{margin:0;font:15px Arial,sans-serif;background:#0e1116;colo
 .side label{display:block;padding:4px 0;font-size:14px}.side button,.top button{font-size:15px;padding:7px 12px;background:#2a5;color:#fff;border:0;border-radius:6px;margin-top:6px}
 .top{margin-bottom:12px}.top input[type=text]{width:340px;font-size:16px;padding:8px;background:#1c222c;color:#fff;border:1px solid #445;border-radius:6px}
 .tabs{margin:10px 0 14px}.tabs a{display:inline-block;padding:8px 15px;margin:0 6px 6px 0;border-radius:18px;background:#1c222c;color:#dde}.tabs a.on{background:#2a5;color:#fff}
-.c{display:inline-block;vertical-align:top;width:172px;margin:0 12px 16px 0}.im{position:relative;width:172px;height:230px;background:#222;border-radius:8px;overflow:hidden}.im img{width:172px;height:230px;border:0}
+.c{position:relative;display:inline-block;vertical-align:top;width:172px;margin:0 12px 16px 0}.q{position:absolute;right:6px;top:6px;margin:0}.q button{margin:0;padding:3px 8px;font-size:15px;background:#1d4f8f;border-radius:5px}.im{position:relative;width:172px;height:230px;background:#222;border-radius:8px;overflow:hidden}.im img{width:172px;height:230px;border:0}
 .bd{position:absolute;left:4px;top:4px;padding:2px 6px;border-radius:4px;font-size:12px;font-weight:bold;color:#fff;background:#456}.bd.g{background:#1d7a3a}.bd.o{background:#b36b00}.bd.r{background:#a02020}.bd.k{background:#333}.bd.b{background:#2b5fa0}.bd.u{background:#555}
 .fm{position:absolute;right:4px;bottom:4px;padding:1px 6px;border-radius:4px;font-size:11px;background:rgba(0,0,0,.7);color:#fff}
 .t{font-size:13px;height:3.6em;overflow:hidden;margin-top:5px}.pg{margin:14px 0}.pg a,.pg b{display:inline-block;min-width:26px;text-align:center;padding:6px;margin:2px;border-radius:5px;background:#1c222c}.pg b{background:#2a5;color:#fff}
@@ -1836,7 +1863,7 @@ async function uiPage(u, host) {
   const qs = extra => { const p = { ...keep, tab: f.tab, cat: f.cat, q: f.q, ...extra }; return '/ui?' + Object.keys(p).filter(k => p[k] !== '' && p[k] != null).map(k => k + '=' + encodeURIComponent(p[k])).join('&'); };
   const nCours = dlSorted().length;
   const tabs = [['', 'Catalogues'], ['cours', `En cours${nCours ? ' (' + nCours + ')' : ''}`], ['seeds', 'Plus de seeds'], ['new', 'Nouveautés'], ['hq', 'Haute qualité (titre)']];
-  const card = x => { const vu = `${base}/video/${x.m.type || 'movie'}/${encodeURIComponent(x.m.id)}.json`; const t = x.tag; return `<div class=c><a href="deovr://${esc(vu)}"><div class=im><img src="${esc(x.m.poster || x.m.background || '')}" width=172 height=230>${t ? `<span class="bd ${t.cls}">${esc(t.label)}</span>` : ''}<span class=fm>${esc(x.fmt)}${x.res ? ' · ' + resLabel(x.res) : ''}</span></div><div class=t>${esc(x.m.name || x.m.id)}${x.year ? ' <small>(' + esc(x.year) + ')</small>' : ''}</div></a></div>`; };
+  const card = x => { const vu = `${base}/video/${x.m.type || 'movie'}/${encodeURIComponent(x.m.id)}.json`; const t = x.tag; return `<div class=c><a href="deovr://${esc(vu)}"><div class=im><img src="${esc(x.m.poster || x.m.background || '')}" width=172 height=230>${t ? `<span class="bd ${t.cls}">${esc(t.label)}</span>` : ''}<span class=fm>${esc(x.fmt)}${x.res ? ' · ' + resLabel(x.res) : ''}</span></div><div class=t>${esc(x.m.name || x.m.id)}${x.year ? ' <small>(' + esc(x.year) + ')</small>' : ''}</div></a><form class=q method=post action="/queue"><input type=hidden name=t value="${pagesMod().token}"><input type=hidden name=act value=add><input type=hidden name=id value="${esc(x.m.id)}"><input type=hidden name=type value="${esc(x.m.type || 'movie')}"><button title="Télécharger en entier (file d'attente)">&#11015;</button></form></div>`; };
   const pg = []; for (let i = 0; i < pages; i++) if (i === 0 || i === pages - 1 || Math.abs(i - page) <= 2) pg.push(i); else if (pg[pg.length - 1] !== '…') pg.push('…');
   const pager = pages > 1 ? `<div class=pg>${page > 0 ? `<a href="${qs({ page: page - 1 })}">◀</a>` : ''}${pg.map(i => i === '…' ? ' … ' : i === page ? `<b>${i + 1}</b>` : `<a href="${qs({ page: i })}">${i + 1}</a>`).join('')}${page < pages - 1 ? `<a href="${qs({ page: page + 1 })}">▶</a>` : ''}</div>` : '';
   const hid = (k, v) => (v !== '' && v != null ? `<input type=hidden name=${k} value="${esc(v)}">` : '');
@@ -1856,7 +1883,7 @@ ${cats.map(c => `<a class="src${f.cat === c.name && !f.tab && !f.q ? ' on' : ''}
 </td><td class=main>
 <p class=note>Les liens <b>deovr://</b> de cette page lancent une NOUVELLE instance de DeoVR en mode bureau (mesuré le 03/10) : à utiliser depuis le navigateur du PC, pas dans le casque.</p>
 <form class=top method=get action=/ui><input type=hidden name=go value=1>${hid('vr', f.vr === '1' ? 1 : '')}${hid('f180', f.f180)}${hid('f360', f.f360)}<input type=text name=q value="${esc(f.q)}" placeholder="Rechercher dans les catalogues Stremio…"> <button>Rechercher</button></form>
-<div class=tabs>${tabs.map(t => `<a class="${(f.q ? '__' : f.tab) === t[0] ? 'on' : ''}" href="${qs({ tab: t[0], cat: '', q: '', page: '' })}">${esc(t[1])}</a>`).join('')} <a href="deovr://${esc(base + '/deovr')}">▶ Bibliothèque DeoVR</a> <a href="/settings">Réglages</a> <a href="/check">Vérifications</a> <a href="/status">Suivi</a></div>
+<div class=tabs>${tabs.map(t => `<a class="${(f.q ? '__' : f.tab) === t[0] ? 'on' : ''}" href="${qs({ tab: t[0], cat: '', q: '', page: '' })}">${esc(t[1])}</a>`).join('')} <a href="deovr://${esc(base + '/deovr')}">▶ Bibliothèque DeoVR</a> <a href="/queue">File d'attente</a> <a href="/settings">Réglages</a> <a href="/check">Vérifications</a> <a href="/status">Suivi</a></div>
 <div>${f.q ? `Recherche « ${esc(f.q)} » : ` : ''}${total} film(s)${f.tab === 'hq' ? ' — « Haute qualité » = d\'après le titre ou la source, indicatif' : ''}</div>
 ${f.tab === 'cours' ? '<p class=note>[EN COURS 18 % · 1,4 Mo/s] = téléchargement en cours · [PRÊT · 8 min en tampon] = assez de film pour lire sans attendre · [BLOQUÉ · 0 pair] = personne n\'envoie rien · [PAUSE] = arrêté, reprise au clic. Un film lancé reste actif ' + cfg.holdMinutes + ' min après la fin de la lecture.</p>' : ''}
 <div style="margin-top:10px">${shown.map(card).join('') || '<p>Aucun film (catalogues en chargement, ou filtres trop stricts : décochez « VR / 3D seulement »).</p>'}</div>
@@ -1952,18 +1979,19 @@ function runReport() {   // le rapport d'assistance est un petit programme à pa
 }
 const toolActions = {
   etat: async () => {
-    const act = [...dls.values()].filter(D => D.active), out = [`Pont ${VERSION_FULL}`, stremioDown ? 'Stremio : NE REPOND PAS' : 'Stremio : ok', `Disque : ${disk.freeGB ?? '?'} Go libres (${disk.where || '?'})`, `Fichiers du pont : ${(tmpUsage().total_Mo / 1000).toFixed(1).replace('.', ',')} Go`, `Telechargements actifs : ${act.length}/${cfg.maxDownloads}`];
+    const act = [...dls.values()].filter(D => D.active), out = [`Pont ${VERSION_FULL}`, stremioDown ? 'Stremio : NE REPOND PAS' : 'Stremio : ok', `Disque : ${disk.freeGB ?? '?'} Go libres (${disk.where || '?'})`, `Fichiers du pont : ${(tmpUsage().total_Mo / 1000).toFixed(1).replace('.', ',')} Go`, `Telechargements actifs : ${act.length}/${cfg.maxDownloads}`, `File de telechargement : ${[...dls.values()].filter(D => D.pinned).length} film(s)`];
     for (const D of act.slice(0, 4)) out.push(`${String(D.title).replace(/[^\x20-\x7EÀ-ÿ]/g, '').replace(/^\s*\[[^\]]*\]\s*/, '').slice(0, 34)} : ${dlState(D).label}`);
     out.push(cfg.sampleMode ? 'Mode echantillon : ACTIVE' : 'Mode echantillon : desactive'); return out;
   },
   rapport: async () => { const ok = await runReport(); return ok ? ['Rapport ecrit dans', path.join(DATA_DIR, 'rapport-support.txt'), '', 'Deposez ce fichier pour analyse.'] : ['Le rapport n\'a pas pu etre ecrit.', 'Utilisez RAPPORT-SUPPORT.bat sur le PC.']; },
+  epingler: async () => { const act = [...dls.values()].filter(D => D.active && !D.bgDone); for (const D of act) { D.pinned = true; D.pinnedAt = D.pinnedAt || Date.now(); } saveT = 0; dlSave(); return act.length ? [`${act.length} film(s) en cours : telechargement COMPLET demande`, '', 'Il continue meme si vous quittez.', 'Une fois complet : lecture directe,', 'sauts instantanes.'] : ['Aucun film en cours de telechargement.', 'Lancez d\'abord un film (ou un apercu).']; },
   pause: async () => { const act = [...dls.values()].filter(D => D.active); for (const D of act) dlPause(D, 'pause demandée depuis l\'onglet Outils'); return [`${act.length} telechargement(s) mis en pause`, '', 'Relancez un film pour reprendre', '(la partie recue reste dans le cache).']; },
   nettoyer: async () => { for (const D of [...dls.values()].filter(x => x.active)) dlPause(D, 'nettoyage demandé depuis l\'onglet Outils'); await sleepMs(1500); let freed = cleanTemp(); try { const td = path.join(cfg.tempDir, 'thumbs'); freed += dirSize(td); fs.rmSync(td, { recursive: true, force: true }); } catch {} return [`${Math.round(freed / 1e6)} Mo supprimes`, 'Les films en cours sont en pause.']; },
   echantillon: async () => { const v = !cfg.sampleMode; cfg.sampleMode = v; libMemo.clear(); let kept = true; try { require('./configfile').save(PATHS.configFile, { sampleMode: v }); } catch { kept = false; } return [`Mode echantillon : ${v ? 'ACTIVE' : 'DESACTIVE'}`, v ? 'Les prochains films : extraits seulement.' : 'Les prochains films : telechargement complet.', kept ? '' : '(non enregistre dans config.json)']; },
 };
 let toolsInst = null, pagesInst = null;
 const toolsMod = () => toolsInst || (toolsInst = require('./tools').create({ log, serveLocal, textClip, actions: toolActions, thumb: base => `${base}/test/thumb.jpg` }));
-const pagesMod = () => pagesInst || (pagesInst = require('./pages').create({ cfg, configFile: PATHS.configFile, save: require('./configfile').save, log, applyHot: () => { libMemo.clear(); vidCache.clear(); }, checks: healthChecks }));
+const pagesMod = () => pagesInst || (pagesInst = require('./pages').create({ cfg, configFile: PATHS.configFile, save: require('./configfile').save, log, applyHot: () => { libMemo.clear(); vidCache.clear(); }, checks: healthChecks, queue: { list: queueList, add: queueAdd, remove: queueRemove } }));
 async function healthChecks() {   // voyants de /check : ce qu'il faut vérifier avant de chercher ailleurs
   const out = [], add = (id, label, status, detail, hint = '') => out.push({ id, label, status, detail, hint });
   add('version', 'Pont', 'info', `${VERSION_FULL} · stockage ${PATHS.mode} · données dans ${DATA_DIR}`);
@@ -2023,6 +2051,7 @@ function start(port = cfg.port) {
   setInterval(() => { rotate(DEBUGFILE, 20e6); rotate(LOGFILE, 10e6); rotate(DECFILE, 10e6); }, 30 * 60000).unref();   // longues sessions (mode dev : sortie d'ffmpeg) : le journal ne grossit pas sans fin
   process.on('exit', c => { try { fs.appendFileSync(DEBUGFILE, `${new Date().toISOString()} [info] arrêt du processus (code ${c})\n`); } catch {} });
   try { if (cfg.localFolder) fs.mkdirSync(cfg.videosDir, { recursive: true }); } catch {}
+  setInterval(queueTick, 20000).unref(); setTimeout(queueTick, 4000).unref();
   evt('demarrage-pont', { version: VERSION_FULL, node: process.versions.node, os: `${process.platform} ${os.release()}`, ramTotale_Go: +(os.totalmem() / 1e9).toFixed(1), ramLibre_Go: +(os.freemem() / 1e9).toFixed(1), reglages: { sampleMode: cfg.sampleMode, seekGuardSec: cfg.seekGuardSec, formatMenu: cfg.formatMenu, maxDownloads: cfg.maxDownloads, startMode: cfg.startMode, tempDir: cfg.tempDir.replace(/^([A-Za-z]:[\\/]Users[\\/])[^\\/]+/, '$1<utilisateur>') } });
   log('info', `Configuration : Node ${process.versions.node} | ${process.platform} ${os.release()} | port ${port} | plateforme ${cfg.platform} | ffmpeg ${ffmpegOk ? 'oui' : 'non'} | DNS ${cfg.dnsMode} | vrOnly ${cfg.vrOnly} | maxDownloads ${cfg.maxDownloads} | garde ${cfg.holdMinutes} min | trackers ${cfg.scrapeTrackers.length} | dossiers locaux ${cfg.localDirs.length}`);
   const server = http.createServer(async (req, res) => {
@@ -2037,6 +2066,7 @@ function start(port = cfg.port) {
     try {
       if (u.pathname === '/setup' || u.pathname === '/setup/logout') return auth.handle(req, res, u);
       if (u.pathname === '/settings') return pagesMod().handleSettings(req, res);
+      if (u.pathname === '/queue') return pagesMod().handleQueue(req, res);
       if (u.pathname === '/check' || u.pathname === '/check.json') return pagesMod().handleCheck(req, res, u.pathname === '/check.json');
       const tlr = u.pathname.match(/^\/tool\/(\w+)\/run\.mp4$/); if (tlr) return toolsMod().run(req, res, tlr[1]);
       const tlv = u.pathname.match(/^\/video\/tool\/(\w+?)(\.json)?$/); if (tlv) { const v = toolsMod().video(tlv[1], base); return v ? send(res, 200, v) : send(res, 404, { error: 'outil inconnu' }); }
