@@ -48,6 +48,7 @@ const cfg = {
   sampleMode: file.sampleMode ?? false,           // MODE ÉCHANTILLON : au lieu de tout télécharger, ne récupérer que des extraits (début, milieu, fin…) pour avoir un aperçu rapide du film ; le film est lu en direct (les zones non téléchargées bloquent la lecture)
   sampleCount: Math.min(12, Math.max(1, Math.round(+file.sampleCount) || 3)),   // nombre d'extraits répartis du début à la fin du film (3 = début, milieu, fin)
   sampleMinutes: +file.sampleMinutes > 0 ? +file.sampleMinutes : 2,   // durée de chaque extrait, en minutes
+  queueHours: /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(file.queueHours || '') ? file.queueHours : '',   // plage horaire des téléchargements en file (ex. "01:00-08:00", minuit franchi accepté) ; vide = à toute heure. Hors plage, la file attend (les films regardés ne sont pas concernés)
   readAheadMB: file.readAheadMB ?? 300,            // lecture directe : le pont télécharge en plus jusqu'à N Mo DEVANT la position du lecteur (octets jetés, ils restent dans le cache de Stremio) pour que la lecture ne rattrape pas le téléchargement ; 0 = désactivé
   thumbBadges: file.thumbBadges ?? true,           // badges dessinés sur les vignettes (résolution, VR180/VR360/3D, seeders ; barre d'avancement dans « En cours ») : lisibles malgré l'absence d'emoji dans les titres de DeoVR
   toolsTab: file.toolsTab ?? true,                 // onglet « Outils » dans DeoVR (rapport, pause, nettoyage, état, mode échantillon) : actions lancées depuis la VR, exécutées quand le lecteur vidéo de DeoVR sur ce PC les ouvre
@@ -575,6 +576,11 @@ function slotSync() {
   }
   return slotKeys;
 }
+function readyScene(base) {   // films entièrement reçus : lecture directe immédiate, sauts instantanés
+  const done = [...dls.values()].filter(D => D.bgDone).sort((a, b) => (b.completedAt || b.lastPlayer || 0) - (a.completedAt || a.lastPlayer || 0)).slice(0, 60);
+  if (!done.length) return null;
+  return { name: 'Prêts (complets)', list: done.map(D => ({ title: '[' + dlState(D).label + '] ' + D.title, videoLength: D.runtime || 0, thumbnailUrl: thumbUrl(base, D.poster || '', cfg.thumbBadges ? { badge: 'PRET' } : null), video_url: `${base}/video/${D.type || 'movie'}/${encodeURIComponent(D.id)}.json` })) };
+}
 function dlScene(base) {   // « En cours » : emplacements FIXES (la liste ne change pas de forme, donc DeoVR n'a pas besoin de la redemander) ; chaque emplacement pointe vers /video/slot/<n>.json, résolu au moment où DeoVR lit la fiche
   const list = slotSync().map((k, i) => { const D = k && dls.get(k); return D
     ? { title: '[' + dlState(D).label + '] ' + D.title, videoLength: D.runtime || 0, thumbnailUrl: thumbUrl(base, D.poster || '', cfg.thumbBadges ? { badge: ({ dl: 'EN COURS', ready: 'PRET', complete: 'COMPLET', pause: 'PAUSE', stuck: 'BLOQUE', search: 'RECHERCHE', meta: 'RECHERCHE', sample: 'ECHANTILLONS' })[dlState(D).code] || '', prog: Math.round(100 * (D.progress || 0)) } : null), video_url: `${base}/video/slot/${i + 1}.json` }
@@ -629,7 +635,7 @@ async function buildLibrary(base, query) {
     if (query) { const all = cs.flatMap(x => x.metas), sc = toScene(`Résultats · ${query}`.slice(0, 40), all, base); if (sc) scenes.unshift(sc); log('info', `recherche « ${query} » : ${all.length} résultat(s) dans ${cs.length} catalogue(s)`); }
   } catch (e) { log('warn', `catalogues Stremio indisponibles (${e.message}) : seuls les onglets locaux et de test sont affichés`); }
   if (!query) {
-    const pre = [dlScene(base)];
+    const pre = [dlScene(base)]; { const rs = readyScene(base); if (rs) pre.push(rs); }
     if (cfg.localDirs.length) { const ls = localScene(base); if (ls) pre.push(ls); }
     pre.push(...[sceneOf('Plus de seeds', seedMetas(), base), sceneOf('Nouveautés', newMetas(), base), sceneOf('Haute qualité (titre)', hqMetas(), base)].filter(Boolean));
     scenes = [...pre, ...scenes];
@@ -1084,6 +1090,7 @@ function dlActivate(D) {
   dlLog(D, 'info', `téléchargement démarré (${[...dls.values()].filter(x => x.active).length}/${cfg.maxDownloads} actifs) — ${D.pinned ? 'téléchargement COMPLET demandé (file d\'attente) : continue sans lecteur jusqu\'au bout' : 'gardé ' + cfg.holdMinutes + ' min après la dernière activité du lecteur'}`);
   torrentCreate(D.hash, 'clic').catch(() => {});
   libMemo.clear(); bgLoop(D); if (cfg.sampleMode && !D.pinned) sampleLoop(D); dlSave();
+  if (!D.pinned) setTimeout(queueTick, 500).unref();   // un film regardé démarre : la file lui laisse la bande passante
 }
 // ----- file d'attente : « télécharger en entier » sans regarder (aperçu -> décision -> téléchargement la nuit -> lecture directe, sauts instantanés) -----
 async function queueAdd(type, id) {
@@ -1093,14 +1100,22 @@ async function queueAdd(type, id) {
   const [hash, idx] = key.split(':'); let D = dls.get(key);
   if (!D) { D = newDl(key, hash, idx); dls.set(key, D); dlByFilm.set(D.id, D); }
   if (D.bgDone) return { D, deja: true };
-  D.pinned = true; D.pinnedAt = D.pinnedAt || Date.now(); D.lastPlayer = Math.max(D.lastPlayer || 0, Date.now());
+  D.pinned = true; D.pinnedAt = D.pinnedAt || Date.now();
   dlLog(D, 'info', 'ajouté à la file de téléchargement (complet)'); saveT = 0; dlSave(); queueTick();
   return { D };
 }
 function queueRemove(key) { const D = dls.get(key); if (!D) return false; D.pinned = false; saveT = 0; dlSave(); if (D.active && Date.now() - D.lastPlayer > cfg.holdMinutes * 60000) dlPause(D, 'retiré de la file de téléchargement'); return true; }
 const queueList = () => [...dls.values()].filter(D => D.pinned || D.completedAt).sort((a, b) => (a.pinnedAt || a.completedAt || 0) - (b.pinnedAt || b.completedAt || 0)).map(D => ({ key: D.key, titre: D.title, etat: dlState(D).label, enFile: !!D.pinned, complet: !!D.bgDone }));
+function inQueueHours(d = new Date()) {
+  if (!cfg.queueHours) return true;
+  const [a, b] = cfg.queueHours.split('-').map(x => { const [h, m] = x.split(':'); return +h * 60 + +m; }), n = d.getHours() * 60 + d.getMinutes();
+  return a <= b ? n >= a && n < b : n >= a || n < b;
+}
 function queueTick() {   // reprend, dans l'ordre, les téléchargements en file quand une place est libre (au démarrage, après un arrêt, quand un film regardé se termine)
   if (disk.critical || stremioDown) return;
+  const now = Date.now(), watched = [...dls.values()].filter(D => D.active && now - D.lastPlayer < 90000);   // un film REGARDÉ (le lecteur lui parle) a toute la bande passante
+  const yieldWhy = watched.length ? 'priorité au film regardé (reprise automatique ensuite)' : !inQueueHours() ? `hors de la plage horaire des téléchargements en file (${cfg.queueHours})` : '';
+  if (yieldWhy) { for (const D of [...dls.values()].filter(x => x.pinned && x.active && !watched.includes(x))) dlPause(D, yieldWhy); return; }
   let n = [...dls.values()].filter(D => D.active).length;
   for (const D of [...dls.values()].filter(x => x.pinned && !x.bgDone && !x.active && !/^disque/.test(x.pausedWhy || '')).sort((a, b) => (a.pinnedAt || 0) - (b.pinnedAt || 0))) { if (n >= cfg.maxDownloads) break; dlActivate(D); if (D.active) n++; }
 }
@@ -2172,4 +2187,4 @@ async function selfCheck() {
   catch {}   // injoignable : stremioPing() le signale une seule fois (message « Stremio n'est pas lancé »)
   if (!fs.existsSync(path.join(RES_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier resources/test incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { inQueueHours, seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };

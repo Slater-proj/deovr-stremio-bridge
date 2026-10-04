@@ -27,6 +27,7 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 | **Haute qualité (titre)** | d'après le **titre** uniquement (4K/6K/8K…), donc indicatif |
 | **un onglet par catalogue Stremio** | vos catalogues, filtrés VR/3D (`vrOnly`) |
 | **Local** | le dossier `videos` à côté de l'exe (et les dossiers de `localDirs`) : copiez-y des films téléchargés ailleurs, ils se lisent en entier. Le format VR se lit dans le nom du fichier (`_180_LR`, `_360_TB`…) et il est alors déclaré ; sinon le menu FLAT / 180 / 360 / fisheye de DeoVR est proposé (il retient votre choix par vidéo), sauf si `localDefaultFormat` ou `"formatMenu": "declare"` l'impose |
+| **Prêts (complets)** | les films entièrement téléchargés : lecture directe immédiate, sauts instantanés |
 | **Outils** | actions depuis la VR : état, rapport d'assistance, pause, nettoyage, mode échantillon |
 | **Test pont** (mode développeur seulement) | six vidéos de test, le mode d'emploi et le banc de test casque (Labos 1 à 16) : voir [TESTING.md](TESTING.md) |
 
@@ -47,6 +48,8 @@ Les torrents lents ne se regardent pas bien en direct. Pour préparer une soiré
 1. **Depuis le PC** : ouvrez `http://localhost:4477/ui`, cliquez le petit bouton ⬇ en haut à droite d'une affiche (ou collez un identifiant, ex. `tt1234567`, sur `http://localhost:4477/queue`).
 2. **Ou depuis la VR** : regardez l'aperçu (mode échantillon) puis lancez l'outil « Télécharger en entier les films en cours » dans l'onglet *Outils*.
 3. Le film est téléchargé en entier par Stremio, sans lecteur, `maxDownloads` à la fois (les films que vous regardez passent d'abord) ; la file survit à un redémarrage du pont. Suivi : `/queue`, onglet *En cours* (`[TÉLÉCHARGEMENT 18 % · 3,2/17,0 Go · 1,4 Mo/s · reste ~2 h]`).
+   - Les films que vous regardez ont toute la bande passante : la file attend pendant une lecture, puis repart.
+   - `"queueHours": "01:00-08:00"` (ou `/settings`) limite la file à la nuit.
 4. Une fois `[EN CACHE · COMPLET]`, lancez-le dans DeoVR : lecture directe immédiate, sauts instantanés.
 
 ## Réglages et vérifications (sur le PC)

@@ -42,6 +42,7 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND
 | `sampleMode` | `false` | MODE ÉCHANTILLON : au lieu de tout télécharger, ne récupérer que des extraits (début, milieu, fin…) pour avoir un aperçu rapide du film ; le film est lu en direct (les zones non téléchargées bloquent la lecture) |
 | `sampleCount` | `3))` | nombre d'extraits répartis du début à la fin du film (3 = début, milieu, fin) |
 | `sampleMinutes` | `+file.sampleMinutes > 0 ? +file.sampleMinutes : 2` | durée de chaque extrait, en minutes |
+| `queueHours` | `'') ? file.queueHours : ''` | plage horaire des téléchargements en file (ex. "01:00-08:00", minuit franchi accepté) ; vide = à toute heure. Hors plage, la file attend (les films regardés ne sont pas concernés) |
 | `readAheadMB` | `300` | lecture directe : le pont télécharge en plus jusqu'à N Mo DEVANT la position du lecteur (octets jetés, ils restent dans le cache de Stremio) pour que la lecture ne rattrape pas le téléchargement ; 0 = désactivé |
 | `thumbBadges` | `true` | badges dessinés sur les vignettes (résolution, VR180/VR360/3D, seeders ; barre d'avancement dans « En cours ») : lisibles malgré l'absence d'emoji dans les titres de DeoVR |
 | `toolsTab` | `true` | onglet « Outils » dans DeoVR (rapport, pause, nettoyage, état, mode échantillon) : actions lancées depuis la VR, exécutées quand le lecteur vidéo de DeoVR sur ce PC les ouvre |

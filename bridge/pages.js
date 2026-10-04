@@ -13,6 +13,7 @@ const SCHEMA = [
   { g: 'Lecture et téléchargement', key: 'maxDownloads', type: 'int', min: 1, max: 6, hot: true, label: 'Films téléchargés en même temps', help: 'Au-delà, le plus ancien est mis en pause. 1 ménage le disque et le débit.' },
   { g: 'Lecture et téléchargement', key: 'holdMinutes', type: 'int', min: 1, max: 1440, hot: true, label: 'Minutes de téléchargement après avoir quitté un film', help: 'Passé ce délai sans lecteur, le film est mis en pause (la partie reçue reste dans le cache de Stremio).' },
   { g: 'Lecture et téléchargement', key: 'startMode', type: 'enum', options: ['rapide', 'sans-coupure'], hot: true, label: 'Démarrage du film', help: 'rapide : dès 20 s de tampon (pauses possibles si le débit manque). sans-coupure : attend assez d\'avance pour ne jamais s\'arrêter.' },
+  { g: 'Lecture et téléchargement', key: 'queueHours', type: 'text', re: /^(\d{1,2}:\d{2}-\d{1,2}:\d{2})?$/, reHelp: 'format HH:MM-HH:MM', hot: true, label: 'Plage horaire des téléchargements en file', help: 'Ex. 01:00-08:00 : la file de téléchargement ne tourne que la nuit (un film regardé n\'est pas concerné). Vide = à toute heure.' },
   { g: 'Lecture et téléchargement', key: 'readAheadMB', type: 'int', min: 0, max: 5000, hot: true, label: 'Avance de téléchargement en lecture directe (Mo)', help: 'Le pont télécharge en plus devant la position du lecteur. 0 = désactivé.' },
   { g: 'Lecture et téléchargement', key: 'seekGuardSec', type: 'int', min: 0, max: 60, hot: true, label: 'Garde de saut (secondes)', help: 'Un saut dans une zone pas encore reçue est refusé au bout de ce délai (au lieu de figer le lecteur) et la zone est préchargée. 0 = désactivé.' },
   { g: 'Lecture et téléchargement', key: 'minFreeCriticalGB', type: 'num', min: 0.5, max: 100, hot: true, label: 'Arrêt des téléchargements sous (Go libres)', help: 'Les clics sont toujours acceptés ; sous ce seuil tout est arrêté et les fichiers temporaires supprimés.' },
@@ -61,6 +62,7 @@ function parse(form, cur) {
     } else if (f.type === 'text') {
       const t = raw.trim();
       if (t.length > 300) { errors.push(`${f.label} : trop long`); continue; }
+      if (f.re && !f.re.test(t)) { errors.push(`${f.label} : ${f.reHelp}`); continue; }
       if (f.regex && t) { try { new RegExp(t, 'i'); } catch (e) { errors.push(`${f.label} : expression invalide (${e.message})`); continue; } }
       values[f.key] = f.dir && !t ? undefined : t;   // dossier vide = valeur par défaut (clé supprimée)
     } else if (f.type === 'lines') {

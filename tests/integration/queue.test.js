@@ -26,6 +26,7 @@ describe('file de téléchargement', () => {
     assert.ok(mocks.history.some(h => new RegExp(`^GET /${hashOf(1)}/0 bytes=0-$`).test(h)) || mocks.history.some(h => h.includes(hashOf(1))), 'lu chez Stremio');
     const v = await bridge.json('/video/movie/mk1.json'); assert.match(v.encodings[0].videoSources[0].url, /\/torrent\/[0-9a-f]{40}\/0\/video\.mp4$/, 'lecture directe');
     assert.match(await bridge.get('/queue').then(r => r.text()), /Film 1/);
+    const prets = (await bridge.json('/deovr')).scenes.find(s => s.name === 'Prêts (complets)'); assert.ok(prets && prets.list.some(i => /Film 1 /.test(i.title) && /COMPLET/.test(i.title)), 'onglet Prêts');
     assert.ok(!/\/live\//.test(bridge.out().split('\n').filter(l => /GET \/live/.test(l)).join('')), 'aucun écran de chargement demandé');
     // un film déjà complet : message dédié, rien n'est relancé
     const again = await bridge.get('/queue', { method: 'POST', headers: H, body: body({ t, act: 'add', id: 'mk1', type: 'movie' }) }); assert.match(await again.text(), /déjà entièrement téléchargé/);
@@ -65,6 +66,21 @@ describe('mode échantillon puis « télécharger en entier » (aperçu -> déci
       await b.get('/queue', { method: 'POST', headers: H, body: body({ t, act: 'add', id: 'mk1', type: 'movie' }) });
       const d = await b.waitFor(async () => { const x = (await b.json('/debug/downloads')).enCours.find(y => /Film 1 /.test(y.film)); return x && /COMPLET/.test(x.etat) ? x : null; }, 40000, 400);
       assert.ok(d.reçu_Mo >= 1.9 && !/ÉCHANTILLON/.test(d.etat), d.etat);
+    } finally { await b.stop(); await mocks.close(); }
+  });
+});
+
+describe('priorité au film regardé', () => {
+  test('quand le lecteur lit un film, les téléchargements en file qui ne sont pas regardés sont mis en attente (bande passante)', { timeout: 60000 }, async () => {
+    const mocks = await startMocks({ film: Buffer.alloc(3e6, 4) }), b = await startBridge(mocks, { maxDownloads: 3 });
+    try {
+      const t = /name="t" value="([0-9a-f]+)"/.exec(await b.get('/queue').then(r => r.text()))[1];
+      await b.get('/queue', { method: 'POST', headers: H, body: body({ t, act: 'add', id: 'mk3', type: 'movie' }) });   // film 3 : jamais complet
+      await b.waitFor(async () => (await b.json('/debug/downloads')).enCours.find(y => /Film 3 /.test(y.film) && y.actif), 20000, 300);
+      await b.json('/video/movie/mk1.json');   // fiche du film regardé (pose les informations)
+      const r = await fetch(`${b.base}/torrent/${hashOf(1)}/0/video.mp4`, { headers: { range: 'bytes=0-199999', 'user-agent': 'NSPlayer/12.00.26100.9549' } }); await r.arrayBuffer();
+      const w = await b.waitFor(async () => { const x = (await b.json('/debug/downloads')).enCours.find(y => /Film 3 /.test(y.film)); return x && !x.actif ? x : null; }, 15000, 300);
+      assert.match(w.etat, /EN ATTENTE/); assert.match(w.arret, /priorité au film regardé/);
     } finally { await b.stop(); await mocks.close(); }
   });
 });

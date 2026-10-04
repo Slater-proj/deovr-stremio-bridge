@@ -82,3 +82,12 @@ test('badge de vignette : seeders par paliers (un nombre exact relancerait ffmpe
   L.filmHealth.set('bd-1', { level: 3, seeders: 37, res: 3840, t: Date.now() }); assert.equal(L.badgeText({ id: 'bd-1', name: 'Scene VR180 SBS 8K' }), a, 'même badge pour 34 et 37 seeders');
   assert.match(a, /^8K VR180 S30\+$/);
 });
+
+test('plage horaire de la file de téléchargement : vide = toujours ; plage de nuit franchissant minuit', () => {
+  const was = L.cfg.queueHours, at = (h, m) => new Date(2026, 9, 4, h, m);
+  try {
+    L.cfg.queueHours = ''; assert.equal(L.inQueueHours(at(12, 0)), true);
+    L.cfg.queueHours = '23:00-07:00'; assert.deepEqual([at(23, 30), at(2, 0), at(6, 59), at(7, 0), at(12, 0), at(22, 59)].map(d => L.inQueueHours(d)), [true, true, true, false, false, false]);
+    L.cfg.queueHours = '09:00-17:00'; assert.deepEqual([at(9, 0), at(12, 0), at(17, 0), at(8, 59)].map(d => L.inQueueHours(d)), [true, true, false, false]);
+  } finally { L.cfg.queueHours = was; }
+});
