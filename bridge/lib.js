@@ -401,8 +401,12 @@ function cleanOv(sp) {   // paramètres de la vignette reçus par l'URL : texte 
   const badge = String(sp.get('b') || '').replace(/[^A-Za-z0-9 .|%+\-\/]/g, '').trim().slice(0, 40), p = sp.get('p');
   return { badge, prog: p !== null && p !== '' && isFinite(+p) ? Math.max(0, Math.min(100, Math.round(+p / 10) * 10)) : null };
 }
-function badgeText(m) {   // « 8K VR180 S34 » : ce que le titre ne dit pas assez lisiblement
-  try { const h = filmHealth.get(m.id), res = resLabel((h && h.res) || detectRes(m.name || '')), f = fmtLabel('', formatOf(m, '')), t = tagInfo(m); return [res, f, t && /^(S\d+|HTTP)$/.test(t.label) ? t.label : ''].filter(Boolean).join(' '); } catch { return ''; }
+const seedBucket = n => (n >= 100 ? 'S100+' : n >= 30 ? 'S30+' : n >= 10 ? 'S10+' : n >= 3 ? 'S3+' : 'S' + n);   // paliers : un nombre exact changerait la vignette (donc un nouveau rendu ffmpeg) à chaque variation des trackers
+function badgeText(m) {   // « 8K VR180 S10+ » : ce que le titre ne dit pas assez lisiblement
+  try {
+    const h = filmHealth.get(m.id), res = resLabel((h && h.res) || detectRes(m.name || '')), f = fmtLabel('', formatOf(m, '')), t = tagInfo(m), sm = t && /^S(\d+)$/.exec(t.label);
+    return [res, f, sm ? seedBucket(+sm[1]) : t && t.label === 'HTTP' ? 'HTTP' : ''].filter(Boolean).join(' ');
+  } catch { return ''; }
 }
 async function makeThumb(url, ov = {}) {
   const thumbDir = path.join(cfg.tempDir, 'thumbs'), sha = x => require('crypto').createHash('sha1').update(x).digest('hex'), over = !!(ov.badge || ov.prog != null);
@@ -2138,4 +2142,4 @@ async function selfCheck() {
   catch {}   // injoignable : stremioPing() le signale une seule fois (message « Stremio n'est pas lancé »)
   if (!fs.existsSync(path.join(RES_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier resources/test incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };

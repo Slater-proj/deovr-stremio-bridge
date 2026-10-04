@@ -74,3 +74,11 @@ test('vignettes : badge et avancement passent dans l\'URL ; paramètres reçus a
   assert.deepEqual(L.cleanOv(sp('')), { badge: '', prog: null });
   assert.equal(L.cleanOv(sp('b=' + 'A'.repeat(100))).badge.length, 40);
 });
+
+test('badge de vignette : seeders par paliers (un nombre exact relancerait ffmpeg à chaque variation) ; résolution et format dans le badge', () => {
+  assert.deepEqual([0, 1, 2, 3, 9, 10, 29, 30, 99, 100, 500].map(L.seedBucket), ['S0', 'S1', 'S2', 'S3+', 'S3+', 'S10+', 'S10+', 'S30+', 'S30+', 'S100+', 'S100+']);
+  L.catalogMetas.set('bd-1', { id: 'bd-1', name: 'Scene VR180 SBS 8K' });
+  L.filmHealth.set('bd-1', { level: 3, seeders: 34, res: 3840, t: Date.now() }); const a = L.badgeText({ id: 'bd-1', name: 'Scene VR180 SBS 8K' });
+  L.filmHealth.set('bd-1', { level: 3, seeders: 37, res: 3840, t: Date.now() }); assert.equal(L.badgeText({ id: 'bd-1', name: 'Scene VR180 SBS 8K' }), a, 'même badge pour 34 et 37 seeders');
+  assert.match(a, /^8K VR180 S30\+$/);
+});

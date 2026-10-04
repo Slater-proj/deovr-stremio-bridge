@@ -91,3 +91,14 @@ describe('onglet Outils de DeoVR', { skip: !HAS_FFMPEG && 'ffmpeg absent' }, () 
     const rep = path.join(bridge.dataDir, 'rapport-support.txt'); assert.ok(fs.existsSync(rep), 'rapport écrit'); assert.match(fs.readFileSync(rep, 'utf8'), /ÉVÉNEMENTS/);
   });
 });
+
+describe('/settings : jamais d\'injection de HTML', () => {
+  let mocks, bridge;
+  before(async () => { mocks = await startMocks({ film: Buffer.alloc(1024) }); bridge = await startBridge(mocks); });
+  after(async () => { await bridge.stop(); await mocks.close(); });
+  test('une valeur de texte contenant du HTML est affichée échappée', async () => {
+    const t = /name="t" value="([0-9a-f]+)"/.exec(await bridge.get('/settings').then(r => r.text()))[1], evil = '"><script>alert(1)</script>';
+    await bridge.get('/settings', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form({ t, f_catalogExclude: evil }) });
+    const page = await bridge.get('/settings').then(r => r.text()); assert.ok(!page.includes('<script>alert(1)'), 'pas de balise injectée'); assert.ok(page.includes('&lt;script&gt;'), 'valeur affichée échappée');
+  });
+});
