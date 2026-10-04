@@ -26,7 +26,9 @@ DeoVR (PC)                    Pont (Node, ce dépôt)                       Stre
 
 | Fichier | Rôle |
 |---|---|
-| `bridge/lib.js` | le serveur (HTTP, addons, DNS, scrape, registre, HLS, interface) |
+| `bridge/lib.js` | le serveur (HTTP, addons, registre des films, pipeline HLS / lecture directe, bibliothèque, interface) |
+| `bridge/format.js`, `bridge/dns.js`, `bridge/scrape.js` | fonctions pures (titre → résolution / codec / format VR, conteneur vidéo, durées) ; DNS de secours ; seeders annoncés par les trackers UDP |
+| `bridge/pages.js`, `bridge/tools.js`, `bridge/configfile.js` | pages `/settings` et `/check` ; onglet Outils de DeoVR ; écriture prudente de `config.json` |
 | `bridge/server.js` | point d'entrée : options de ligne de commande, bannière, ouverture du navigateur, code de sortie 2 si le port est pris |
 | `bridge/paths.js` | où vivent les fichiers : `config.json` et `resources\` à côté de l'exe, données dans `<exe>\data`, code (dossier du code), repli `%APPDATA%` |
 | `bridge/settings.js` | modèle du `config.json` créé au premier lancement (port 4477, réglages courants, aucun identifiant) |

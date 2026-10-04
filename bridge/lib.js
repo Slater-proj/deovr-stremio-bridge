@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
+const { parseRuntime, VR_RE, resLabel, fmtLabel, mbs, fmtDur, detectRes, detectCodec, detectFormat, probeContainer, sniff, wrapTxt } = require('./format');   // fonctions pures (format.js)
 
 // ---------- Configuration ----------
 let file = {};
@@ -123,47 +124,7 @@ function log(level, ...a) {
 process.on('uncaughtException', e => { log('error', `EXCEPTION NON GÉRÉE (le pont continue) : ${e && e.stack || e}`); });
 process.on('unhandledRejection', e => { log('error', `PROMESSE REJETÉE NON GÉRÉE : ${e && e.stack || e}`); });
 
-// ---------- DNS de secours : si le DNS du PC/box/FAI ne résout pas un hôte (ou renvoie une adresse bidon), on demande à un DNS public ----------
-const dnsMod = require('dns'), sysLookup = dnsMod.lookup;
-const pubResolver = new dnsMod.Resolver({ timeout: 2500, tries: 2 });
-try { pubResolver.setServers(cfg.publicDns); } catch (e) { log('warn', `publicDns invalide : ${e.message}`); }
-const dnsPub = new Map(), dnsForce = new Map(), dnsLocal = new Map(), dnsStats = { system: 0, publicUsed: 0, publicFail: 0, hosts: {} };
-const isBogon = a => /^(0\.|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|::1?$|fe80:)/i.test(a || '');
-const dnsCare = h => typeof h === 'string' && h.includes('.') && !/^[\d.]+$/.test(h) && !h.includes(':') && !/(^|\.)(localhost|local|lan|home)$/i.test(h);
-function dohResolve(host) {   // DNS sur HTTPS vers une adresse IP (aucun DNS nécessaire)
-  return new Promise((ok, no) => {
-    const r = require('https').get({ host: '1.1.1.1', path: `/dns-query?name=${encodeURIComponent(host)}&type=A`, headers: { accept: 'application/dns-json' }, timeout: 4000 }, res => {
-      let b = ''; res.on('data', c => b += c); res.on('end', () => { try { const a = (JSON.parse(b).Answer || []).filter(x => x.type === 1).map(x => x.data); a.length ? ok(a) : no(new Error('DoH : aucune réponse')); } catch (e) { no(e); } });
-    });
-    r.on('timeout', () => r.destroy(new Error('DoH timeout'))); r.on('error', no);
-  });
-}
-async function publicResolve(host) {
-  const m = dnsPub.get(host); if (m && Date.now() - m.t < 10 * 60000) return m.a;
-  let a; try { a = await new Promise((ok, no) => pubResolver.resolve4(host, (e, x) => (e ? no(e) : ok(x)))); } catch (e) { a = await dohResolve(host); }
-  dnsPub.set(host, { t: Date.now(), a }); return a;
-}
-function viaPublic(host, opts, cb, origErr) {
-  publicResolve(host).then(a => {
-    dnsStats.publicUsed++; dnsStats.hosts[host] = 'public';
-    if (!dnsForce.has(host)) log('info', `DNS : « ${host} » résolu par le DNS public (${a[0]})`);
-    dnsForce.set(host, Date.now());
-    if (opts.all) cb(null, a.map(x => ({ address: x, family: 4 }))); else cb(null, a[0], 4);
-  }, e => { dnsStats.publicFail++; dnsStats.hosts[host] = 'échec'; cb(origErr || e); });
-}
-dnsMod.lookup = function (host, opts, cb) {
-  if (typeof opts === 'function') { cb = opts; opts = {}; } else if (typeof opts === 'number') opts = { family: opts }; opts = opts || {};
-  if (cfg.dnsMode === 'system' || !dnsCare(host) || opts.family === 6) return sysLookup.call(dnsMod, host, opts, cb);
-  if (cfg.dnsMode === 'public' || (dnsForce.has(host) && Date.now() - dnsForce.get(host) < 30 * 60000)) return viaPublic(host, opts, (e, ...r) => (e ? sysLookup.call(dnsMod, host, opts, cb) : cb(null, ...r)));
-  sysLookup.call(dnsMod, host, opts, (err, addr, fam) => {
-    const first = Array.isArray(addr) ? (addr[0] || {}).address : addr;
-    if (!err && first && (!isBogon(first) || Date.now() - (dnsLocal.get(host) || 0) < 30 * 60000)) { dnsStats.system++; return cb(null, addr, fam); }
-    if (!dnsForce.has(host)) log('warn', `DNS du PC : « ${host} » ${err ? 'non résolu (' + err.code + ')' : 'résolu vers une adresse locale ' + first} -> essai DNS public`);
-    if (err) return viaPublic(host, opts, cb, err);
-    viaPublic(host, opts, (e, ...r) => { if (!e) return cb(null, ...r); dnsLocal.set(host, Date.now()); dnsStats.hosts[host] = 'local'; cb(null, addr, fam); });   // adresse locale (addon hébergé chez soi, ex. 192.168.x) inconnue du DNS public : on garde la réponse du DNS du PC (30 min) au lieu d'échouer
-  });
-};
-const forcePublicDns = host => { if (cfg.dnsMode !== 'system' && dnsCare(host) && !dnsForce.has(host)) { dnsForce.set(host, Date.now()); return true; } return false; };
+const { dnsPub, dnsForce, dnsLocal, dnsStats, forcePublicDns } = require('./dns')({ cfg, log });   // DNS de secours (dns.js)
 
 // Masque les secrets (clés debrid dans les URLs d'addons/flux)
 function redact(u) {
@@ -381,14 +342,6 @@ async function fetchCatalogPages(entry, query, patient = false) {
   return first.concat(...rest);
 }
 
-const parseRuntime = s => {
-  if (!s) return 0;
-  const str = String(s);
-  const h = str.match(/(\d+)\s*h/i), m = str.match(/(\d+)\s*m/i);
-  if (h || m) return ((h ? +h[1] : 0) * 60 + (m ? +m[1] : 0)) * 60;
-  return (parseInt(str, 10) || 0) * 60;
-};
-const VR_RE = /(^|[^a-z0-9])(3d|vr|vr180|sbs|hsbs|h-sbs|half[-. ]?sbs|tab|h-?ou|over[-. ]?under|180|360)([^a-z0-9]|$)/i;
 
 // ---------- VR : un film est déclaré VR à DeoVR dès que son catalogue / sa catégorie / son genre / son titre l'indique ----------
 const filmCats = new Map();   // id film -> Set des noms de catalogues et de genres qui le listent
@@ -415,11 +368,7 @@ function applyVR(f, why) {   // film déclaré VR par son catalogue : jamais pla
   return { screenType: 'dome', stereoMode: f.stereoMode === 'off' ? 'sbs' : f.stereoMode, is3d: true, forced: why };
 }
 const formatOf = (m, sceneName) => applyVR(detectFormat(m.name || ''), vrForce(m, sceneName));
-const resLabel = h => (h >= 3600 ? '8K' : h >= 2800 ? '6K' : h >= 2000 ? '4K' : h >= 1400 ? '2K' : h > 0 ? 'HD' : '');
-const fmtLabel = (t, f) => { f = f || detectFormat(t || ''); return f.screenType === 'dome' || f.screenType === 'mkx200' || f.screenType === 'fisheye' || f.screenType === 'rf52' ? 'VR180' : f.screenType === 'sphere' ? 'VR360' : f.is3d ? '3D' : '2D'; };
 const MINLV = { black: 0, red: 1, orange: 2, green: 3 };
-const mbs = x => `${((x || 0) / 1e6).toFixed(1).replace('.', ',')} Mo/s`;
-const fmtDur = s => (s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
 // Pastille : TOUJOURS la même dans la liste ET dans le titre de la fiche vidéo (DeoVR remplace le titre de la liste par celui de la fiche après 2-3 s).
 // Film lancé par un clic : état du téléchargement ; sinon : seeders annoncés par les trackers (aucun test, aucun téléchargement).
 // Film « mort au clic » : téléchargement lancé, mais aucune métadonnée ni aucun octet après 90 s alors que les trackers annonçaient des seeders
@@ -708,40 +657,6 @@ async function browse(base, key, genre) {
 }
 
 // ---------- Streams -> JSON vidéo DeoVR ----------
-function detectRes(t) {   // hauteur de la vidéo (valeurs type DeoVR : 1080, 1440, 2160, 2880, 3360, 3840) ; 0 = inconnue
-  t = String(t || '');
-  let m = t.match(/(\d{3,5})\s*[x×]\s*(\d{3,5})/i);
-  if (m) return Math.min(+m[2], 8640);
-  m = t.match(/(?:^|[^0-9])(\d{3,4})\s*p(?![a-z])/i);   // « 3840p », « 3072p », « 1080p »
-  if (m && +m[1] >= 360 && +m[1] <= 6480) return +m[1];
-  m = t.match(/(?:^|[^a-z0-9])(\d{1,2}(?:[.,]\d)?)\s*k(?:[^a-z0-9]|$)/i);
-  if (m) { const k = parseFloat(m[1].replace(',', '.')); return ({ 4: 2160, 5: 2560, 6: 2880, 7: 3360, 8: 3840, 12: 5760 })[k] || Math.round(k * 480); }
-  if (/uhd|ultra[-. ]?hd/i.test(t)) return 2160;
-  if (/qhd/i.test(t)) return 1440;
-  if (/(fhd|full[-. ]?hd)/i.test(t)) return 1080;
-  if (/(^|[^a-z0-9])hd([^a-z0-9]|$)/i.test(t)) return 720;
-  return 0;
-}
-const detectCodec = t => (/(hevc|h\.?265|x265)/i.test(t) ? 'hevc' : /(^|[^a-z0-9])av1([^a-z0-9]|$)/i.test(t) ? 'av1' : /(^|[^a-z0-9])vp9([^a-z0-9]|$)/i.test(t) ? 'vp9' : 'h264');
-function detectFormat(t, opts = {}) {
-  let stereo = /(h-?sbs|half[-. ]?sbs|(^|[^a-z0-9])sbs([^a-z0-9]|$)|side[-. ]by[-. ]side|3d[-. ]?lr)/i.test(t) ? 'sbs'
-    : /(h-?ou|(^|[^a-z0-9])tab([^a-z0-9]|$)|top[-. ]bottom|over[-. ]under|3d[-. ]?tb)/i.test(t) ? 'tb' : 'off';
-  if (stereo === 'off' && /(^|[^a-z0-9])(vr\d*|180|360|3d|fish[-. ]?eye|mkx[-. ]?200|rf[-. ]?52)([^a-z0-9]|$)/i.test(t)) {   // titre manifestement VR : « LR » = côte à côte, « TB » / « OU » = dessus-dessous
-    if (/(^|[^a-z0-9])lr([^a-z0-9]|$)/i.test(t)) stereo = 'sbs';
-    else if (/(^|[^a-z0-9])(tb|ou)([^a-z0-9]|$)/i.test(t)) stereo = 'tb';
-  }
-  if (opts.local && stereo === 'off') {   // conventions de nommage des fichiers VR : _LR, _3dh, _TB, _3dv, _mono
-    if (/(^|[^a-z0-9])(lr|3dh)([^a-z0-9]|$)/i.test(t)) stereo = 'sbs';
-    else if (/(^|[^a-z0-9])(tb|3dv|ou)([^a-z0-9]|$)/i.test(t)) stereo = 'tb';
-  }
-  if (/mkx[-. ]?200/i.test(t)) return { screenType: 'mkx200', stereoMode: stereo === 'off' ? 'sbs' : stereo, is3d: true };
-  if (/rf[-. ]?52/i.test(t)) return { screenType: 'rf52', stereoMode: stereo === 'off' ? 'sbs' : stereo, is3d: true };
-  if (/fish[-. ]?eye/i.test(t)) return { screenType: 'fisheye', stereoMode: stereo === 'off' ? 'sbs' : stereo, is3d: true };
-  if (/(^|[^0-9])360([^0-9]|$)/.test(t)) return { screenType: 'sphere', stereoMode: stereo, is3d: stereo !== 'off' };
-  if (/(^|[^0-9])180([^0-9]|$)|vr180/i.test(t)) return { screenType: 'dome', stereoMode: stereo === 'off' ? 'sbs' : stereo, is3d: true };
-  if (stereo !== 'off') return { screenType: 'flat', stereoMode: stereo, is3d: true };
-  return { screenType: 'flat', stereoMode: 'off', is3d: false };
-}
 
 // URL de base du serveur Stremio local telle que DeoVR doit l'appeler
 function localBaseFor(reqHost) {
@@ -795,21 +710,6 @@ function toPlayable(s, base) {
 }
 
 // Lit l'en-tête d'un fichier (128 Ko) : conteneur, codec, fichier lisible ? (archives/ISO exclus)
-function probeContainer(buf) {
-  const t = (a, b) => buf.toString('latin1', a, b), has = x => buf.indexOf(x, 0, 'latin1') >= 0;
-  if (buf.length >= 4 && buf.readUInt32BE(0) === 0x1A45DFA3) {
-    const codec = has('V_MPEGH/ISO/HEVC') ? 'hevc' : has('V_MPEG4/ISO/AVC') ? 'h264' : has('V_AV1') ? 'av1' : has('V_VP9') ? 'vp9' : null;
-    return { container: 'mkv', ext: '.mkv', codec, playable: true, note: codec === 'av1' || codec === 'vp9' ? `codec ${codec} : support DeoVR incertain` : '' };
-  }
-  if (buf.length >= 12 && t(4, 8) === 'ftyp') {
-    const moov = has('moov'), codec = !moov ? null : (has('hvc1') || has('hev1')) ? 'hevc' : has('avc1') ? 'h264' : has('av01') ? 'av1' : null;
-    return { container: 'mp4', ext: '.mp4', codec, playable: true, moovAtStart: moov, note: moov ? (codec === 'av1' ? 'codec av1 : support DeoVR incertain' : '') : 'index (moov) absent du début : démarrage lent ou impossible tant que la fin du fichier n\'est pas reçue' };
-  }
-  if (t(0, 4) === 'Rar!' || t(0, 2) === 'PK' || t(0, 4) === '7z\xBC\xAF' || (buf.length > 0x8006 && t(0x8001, 0x8006) === 'CD001')) return { container: 'archive', playable: false, note: 'archive/ISO, pas une vidéo (mauvais fichier choisi dans le torrent)' };
-  if (t(0, 4) === 'RIFF' && t(8, 12) === 'AVI ') return { container: 'avi', ext: '.avi', playable: true, note: 'AVI : ancien format, support DeoVR incertain' };
-  if (buf[0] === 0x47 || (buf.length > 5 && buf[4] === 0x47)) return { container: 'ts', ext: '.ts', playable: true, note: '' };
-  return { container: 'inconnu', playable: true, note: 'en-tête non reconnu : ' + buf.toString('hex', 0, 8) };
-}
 const MIME = { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.ts': 'video/mp2t' };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function collectStreams(type, id, o = {}) {
@@ -892,61 +792,7 @@ async function analyzeVideo(type, id, base, reqHost, opts = {}) {
 
 
 // ---------- Scrape des trackers UDP (BEP 15) : nombre de seeders SANS démarrer de torrent ----------
-const dgram = require('dgram'), crypto = require('crypto');
-const scrapeStats = { asked: 0, answered: 0, lastOk: 0, per: {} };
-function udpScrape(hostport, hashes, timeout = 4500) {
-  return new Promise(resolve => {
-    const i = hostport.lastIndexOf(':'), host = hostport.slice(0, i), port = +hostport.slice(i + 1);
-    const sock = dgram.createSocket('udp4'), out = new Map(), tid = crypto.randomBytes(4); let stage = 0, done = false;
-    const c = Buffer.alloc(16); c.writeUInt32BE(0x417, 0); c.writeUInt32BE(0x27101980, 4); c.writeUInt32BE(0, 8); tid.copy(c, 12);
-    let tm, rt;
-    const fin = ok => { if (done) return; done = true; clearTimeout(tm); clearTimeout(rt); try { sock.close(); } catch {} resolve(ok ? out : null); };
-    tm = setTimeout(() => fin(false), timeout);
-    rt = setTimeout(() => { if (stage === 0) sock.send(c, port, host, () => {}); }, 1800);   // un paquet UDP peut se perdre : un seul renvoi
-    sock.on('error', () => fin(false));
-    sock.on('message', m => {
-      if (m.length < 8 || !m.subarray(4, 8).equals(tid)) return;
-      const action = m.readUInt32BE(0);
-      if (stage === 0 && action === 0 && m.length >= 16) {
-        stage = 1;
-        sock.send(Buffer.concat([m.subarray(8, 16), Buffer.from([0, 0, 0, 2]), tid, ...hashes.map(h => Buffer.from(h, 'hex'))]), port, host, e => { if (e) fin(false); });
-      } else if (stage === 1 && action === 2) {
-        hashes.forEach((h, k) => { const o = 8 + k * 12; if (m.length >= o + 12) out.set(h, { seeders: m.readUInt32BE(o), completed: m.readUInt32BE(o + 4), leechers: m.readUInt32BE(o + 8) }); });
-        fin(true);
-      } else if (action === 3) fin(false);
-    });
-    sock.send(c, port, host, e => { if (e) fin(false); });
-  });
-}
-const seedMemo = new Map(), seedPending = new Map(); let seedTimer = null;
-function seedInfo(hash) {   // -> { seeders, leechers, completed, trackers } | null (aucun tracker n'a répondu : on ne conclut rien)
-  hash = String(hash).toLowerCase();
-  const m = seedMemo.get(hash);
-  if (m && Date.now() - m.t < (m.v ? 10 : 1) * 60000) return Promise.resolve(m.v);
-  return new Promise(res => {
-    const l = seedPending.get(hash) || []; l.push(res); seedPending.set(hash, l);
-    if (!seedTimer) seedTimer = setTimeout(flushSeeds, 250);
-  });
-}
-async function flushSeeds() {
-  seedTimer = null;
-  const batch = [...seedPending]; seedPending.clear();
-  for (let i = 0; i < batch.length; i += 60) {
-    const chunk = batch.slice(i, i + 60), hashes = chunk.map(x => x[0]);
-    const results = await Promise.all(cfg.scrapeTrackers.map(async t => {
-      scrapeStats.asked++; const r = await udpScrape(t, hashes), st = scrapeStats.per[t] = scrapeStats.per[t] || { ok: 0, fail: 0 };
-      if (r) { scrapeStats.answered++; scrapeStats.lastOk = Date.now(); st.ok++; } else st.fail++;
-      return r;
-    }));
-    const answered = results.filter(Boolean);
-    if (!answered.length) log('warn', `scrape : aucun des ${cfg.scrapeTrackers.length} trackers n'a répondu (UDP bloqué par le pare-feu/routeur ?) : santé estimée par mesure réelle uniquement`);
-    for (const [h, resolvers] of chunk) {
-      let v = null;
-      if (answered.length) { v = { seeders: 0, leechers: 0, completed: 0, trackers: answered.length }; for (const r of answered) { const x = r.get(h); if (x) { v.seeders = Math.max(v.seeders, x.seeders); v.leechers = Math.max(v.leechers, x.leechers); v.completed = Math.max(v.completed, x.completed); } } }
-      seedMemo.set(h, { t: Date.now(), v }); resolvers.forEach(r => r(v));
-    }
-  }
-}
+const { udpScrape, seedInfo, scrapeStats, seedMemo } = require('./scrape')({ cfg, log });   // seeders annoncés par les trackers UDP (scrape.js)
 const levelFromSeeds = n => (n >= 10 ? 3 : n >= 3 ? 2 : n >= 1 ? 1 : 0);
 const eff = h => (h < 0 ? 0.5 : h);   // niveau inconnu : classé entre noir et rouge pour le tri
 function applyKnownHealth(c) {   // santé sans rien démarrer : mesure mémorisée + seeders des trackers
@@ -1378,6 +1224,7 @@ async function readRange(D, from, to) {   // lit [from, to] chez Stremio ; les o
 }
 async function sampleLoop(D) {
   if (D.sampleRunning) return; D.sampleRunning = true;
+  await sleepMs(300);   // dlActivate tourne AVANT liveStart (même requête) : laisser la session de chargement se créer, sinon on ne l'attend pas
   try {
     const t0 = Date.now();
     while (D.active && !D.bgStop && Date.now() - t0 < 90000 && !(D.size && (D.runtime || (D.live && D.live.durSec)))) await sleepMs(1000);   // taille et durée connues
@@ -1682,7 +1529,6 @@ function loadStatus(s) {
   return { step, stepTxt, prog, problem, eta, T, got, sp, need, age };
 }
 const VRW = 34;   // largeur max (caractères) du texte en VR
-const wrapTxt = (t, n = 64) => { const out = []; let line = ''; for (const w of String(t).split(/\s+/)) { if ((line + ' ' + w).trim().length > n) { out.push(line); line = w; } else line = (line + ' ' + w).trim(); } if (line) out.push(line); return out; };
 function liveProgressText(s, i = 0) {   // lignes COURTES (≤ 30 caractères) : en VR le texte occupe le centre de la vue, pas tout le dôme
   const ttl = String(s.D.title || '').replace(/[^\x20-\x7EÀ-ÿ]/g, '').replace(/^\s*\[[^\]]*\]\s*/, '').slice(0, 54);
   if (s.realReady && s.direct) return ['FILM PRÊT', ttl, '', `${Math.round(s.producedSec || 0)} s de film déjà reçus`, '', cfg.sampleMode ? 'Mode échantillons : appuyez sur RETOUR' : 'Film HEVC : appuyez sur RETOUR', 'puis relancez le film.', 'Il démarrera aussitôt.', ...(/^(dts|truehd|mlp|vorbis|opus)$/.test(s.audio || '') ? ['', `Son ${s.audio.toUpperCase()} : peut etre muet.`] : [])];
@@ -1914,15 +1760,6 @@ async function pipeUpstream(req, res, url, headers = {}, firstByteMs = 0, track 
     if (!res.headersSent) res.writeHead(guarded ? 503 : timedOut ? 504 : 502, guarded ? { 'retry-after': '8', 'cache-control': 'no-store' } : {}); res.end();
   }
 }
-function sniff(c) {
-  const b = Buffer.from(c.subarray(0, 16));
-  if (b.length >= 12 && b.toString('latin1', 4, 8) === 'ftyp') return { name: `MP4/MOV (marque ${b.toString('latin1', 8, 12)})`, ext: '.mp4' };
-  if (b.length >= 4 && b.readUInt32BE(0) === 0x1A45DFA3) return { name: 'Matroska/WebM (MKV)', ext: '.mkv' };
-  if (b.toString('latin1', 0, 4) === 'RIFF') return { name: 'AVI', ext: '.avi' };
-  if (b.length >= 8 && ['moov', 'mdat', 'free', 'wide'].includes(b.toString('latin1', 4, 8))) return { name: 'MP4 (atome ' + b.toString('latin1', 4, 8) + ')', ext: '.mp4' };
-  if (b[0] === 0x47) return { name: 'MPEG-TS', ext: '.ts' };
-  return { name: 'inconnu (' + b.toString('hex', 0, 8) + ')', ext: null };
-}
 function statusData() {   // page /status : films lancés par un clic (actifs et en pause)
   const now = Date.now();
   return Promise.resolve(dlSorted().map(D => { const st = dlState(D); return { film: D.title, etat: st.label, actif: D.active ? 'oui' : 'non', pairs: D.peers, debit_MoS: +((D.speed || 0) / 1e6).toFixed(2), necessaire_MoS: D.need ? +(D.need / 1e6).toFixed(2) : null, ratio: D.need && D.speed ? +(D.speed / D.need).toFixed(2) : null,
@@ -2145,7 +1982,7 @@ async function healthChecks() {   // voyants de /check : ce qu'il faut vérifier
 const rootHits = [];   // dernières demandes de la racine (/ et /deovr) : ce que DeoVR demande vraiment quand on tape l'adresse du pont
 function perfData() {
   const lv = {}; for (const [, h] of filmHealth) { const k = h.hidden ? 'masqués(aucune source)' : (BADGES[h.level] || '⚪'); lv[k] = (lv[k] || 0) + 1; }
-  return { uptimeS: Math.round(process.uptime()), version: VERSION, scan: { enFile: scanQ.length, enCours: scanning, ...scanStat }, films: { analyses: filmHealth.size, parNiveau: lv }, enCours: dlData(false), bilans: bilans.slice(-15), ouverturesTest: Object.fromEntries(openTests), racine: rootHits.slice(-8), relancesDeoVR: relaunch.list.slice(-10),
+  return { uptimeS: Math.round(process.uptime()), version: VERSION, scan: { enFile: scanQ.length, enCours: scanning, ...scanStat }, films: { analyses: filmHealth.size, parNiveau: lv }, enCours: dlData(false), bilans: bilans.slice(-15), ouverturesTest: Object.fromEntries(openTests), racine: rootHits.slice(-8), relancesDeoVR: relaunch.list.slice(-10), memoire: { rssMo: Math.round(process.memoryUsage().rss / 1e6), heapMo: Math.round(process.memoryUsage().heapUsed / 1e6) },
     disque: { libreGo: disk.freeGB, ou: disk.where, bas: disk.low, critique: disk.critical, pont: tmpUsage() }, cacheStremio: cacheInfo, stremioArrete: stremioDown ? { depuis_s: Math.round((Date.now() - stremioDown.since) / 1000), cause: stremioDown.why } : null, ecranChargement: { actif: cfg.loadingScreen, ffmpeg: ffmpegOk, ffmpegVersion: ffmpegMajor, hevc: hevcEnc || 'non', police: FONT ? 'oui' : 'non', sessions: liveData() },
     fichesVideo: { enCours: jsonLimit.running(), enAttente: jsonLimit.waiting(), ...perfCount }, bibliotheque: libCount, dns: { mode: cfg.dnsMode, ...dnsStats },
     scrape: { ...scrapeStats, trackers: cfg.scrapeTrackers, memo: seedMemo.size }, hotesEnPanne: [...hostDown].filter(([, x]) => Date.now() - x.t < 120000).map(([h, x]) => ({ hote: h.replace(/^(.{3}).*(\..*)$/, '$1***$2'), code: x.code })) };

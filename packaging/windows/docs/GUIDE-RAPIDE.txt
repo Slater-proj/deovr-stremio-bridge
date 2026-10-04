@@ -22,7 +22,9 @@ Rien a installer : tout est dans ce dossier. Supprimer le dossier supprime tout.
    - Dans le navigateur integre de DeoVR, tapez  http://localhost:4477
      (ou l'adresse affichee dans la console au demarrage).
    - Onglets : "En cours" (vos films lances), "Plus de seeds", "Nouveautes", un onglet par
-     catalogue Stremio, "Mes videos" (dossiers locaux), "Test pont".
+     catalogue Stremio, "Local" (dossier videos + dossiers locaux), "Outils"
+     (etat, rapport, pause, nettoyage depuis la VR), "Test pont" (mode developpeur).
+   - Reglages sans editer le JSON : http://localhost:4477/settings  |  Voyants : http://localhost:4477/check
    - Lancer un film = demarrer son telechargement. Un ecran de chargement s'affiche
      tout de suite (etape, pairs, debit, tampon, temps restant). 30 a 60 secondes au debut
      est normal. Film H.264 : il demarre tout seul. Film HEVC (la plupart des films 6K/8K) :

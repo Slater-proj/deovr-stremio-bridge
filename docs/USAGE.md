@@ -27,7 +27,8 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 | **Haute qualité (titre)** | d'après le **titre** uniquement (4K/6K/8K…), donc indicatif |
 | **un onglet par catalogue Stremio** | vos catalogues, filtrés VR/3D (`vrOnly`) |
 | **Local** | le dossier `videos` à côté de l'exe (et les dossiers de `localDirs`) : copiez-y des films téléchargés ailleurs, ils se lisent en entier. Le format VR se lit dans le nom du fichier (`_180_LR`, `_360_TB`…) et il est alors déclaré ; sinon le menu FLAT / 180 / 360 / fisheye de DeoVR est proposé (il retient votre choix par vidéo), sauf si `localDefaultFormat` ou `"formatMenu": "declare"` l'impose |
-| **Test pont** | six vidéos de test, le mode d'emploi et le banc de test casque (Labos 1 à 16) : voir [TESTING.md](TESTING.md) |
+| **Outils** | actions depuis la VR : état, rapport d'assistance, pause, nettoyage, mode échantillon |
+| **Test pont** (mode développeur seulement) | six vidéos de test, le mode d'emploi et le banc de test casque (Labos 1 à 16) : voir [TESTING.md](TESTING.md) |
 
 ## Lire un film
 
@@ -39,6 +40,12 @@ Dans le navigateur de DeoVR, tapez l'adresse du pont **sans rien d'autre** (ex. 
 6. Vous pouvez **quitter** : le téléchargement continue `holdMinutes` (30 min) puis se met en pause (la partie reçue reste dans le cache Stremio). Relancer le film reprend où il en était.
 
 Jusqu'à `maxDownloads` (3) films sont actifs en même temps ; au-delà, le plus ancien est mis en pause. Si votre cache Stremio est petit, le pont réduit ce nombre.
+
+## Réglages et vérifications (sur le PC)
+
+- `http://localhost:4477/settings` : tous les réglages courants dans un formulaire (inutile d'éditer `config.json`). Les réglages marqués « après redémarrage » (port, dossiers…) ne jouent qu'au prochain lancement.
+- `http://localhost:4477/check` : voyants — Stremio, compte, ffmpeg, place disque, cache, trackers, DeoVR. À regarder en premier en cas de problème.
+- Onglet **Outils** dans DeoVR : état du pont, rapport d'assistance, pause de tous les téléchargements, nettoyage des fichiers temporaires, mode échantillon. Lancez l'outil comme une vidéo ; un petit clip affiche le résultat. (Ces outils ne marchent que depuis DeoVR sur le PC du pont.)
 
 ## Sauter dans un film en cours de téléchargement
 

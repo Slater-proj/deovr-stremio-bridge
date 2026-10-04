@@ -166,7 +166,7 @@ describe('mode échantillon : seulement des extraits (début, milieu, fin), lect
       const ranged = mocks.history.filter(h => /bytes=\d+-\d+$/.test(h));
       assert.ok(ranged.length >= 3, 'tranches demandées à Stremio : ' + mocks.history.join(' | '));
       assert.match(bridge.out(), /mode échantillon : 3 extrait\(s\)/);
-      const v = await bridge.json('/video/movie/mk1.json'); assert.match(v.encodings[0].videoSources[0].url, /\/torrent\//, 'au clic suivant : fichier direct');
+      assert.ok(await bridge.waitFor(async () => /\/torrent\//.test((await bridge.json('/video/movie/mk1.json')).encodings[0].videoSources[0].url), 20000, 500), 'au clic suivant : fichier direct');
       const h0 = mocks.history.length, hr = await fetch(`${bridge.base}/torrent/${hashOf(1)}/0/video.mp4`, { method: 'HEAD' });   // sonde HEAD de DeoVR : réponse immédiate, aucune donnée demandée à Stremio
       assert.equal(hr.status, 200); assert.equal(+hr.headers.get('content-length'), film.data.length); assert.equal(mocks.history.length, h0, 'HEAD : aucune requête vers Stremio');
     } finally { await bridge.stop(); await mocks.close(); }

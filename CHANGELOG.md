@@ -4,6 +4,18 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Ajouté
+- **Page `/settings`** : tous les réglages courants dans un formulaire (interrupteurs, listes, validation), sans éditer `config.json` à la main. Réservée au PC lui-même (adresse loopback, `Host` localhost, `Origin`, jeton par lancement, limitation d'essais). Seules les valeurs changées sont écrites (`config.json` écrit de façon atomique, jamais écrasé s'il est illisible) ; la plupart des réglages jouent tout de suite, les autres (port, `bindHost`, dossiers) au redémarrage — la page le dit. Un envoi partiel ne décoche rien.
+- **Page `/check`** (et `/check.json`) : voyants de bon fonctionnement — Stremio, compte, addons et catalogues, ffmpeg, place disque, fichiers du pont, cache de Stremio, trackers UDP, qui peut joindre le pont, DeoVR a-t-il contacté le pont, relances de DeoVR.
+- **Onglet « Outils » dans DeoVR** (`toolsTab`) : état du pont, rapport d'assistance, mise en pause de tous les téléchargements, nettoyage des fichiers temporaires, mode échantillon on/off — depuis la VR, sans clavier. L'action n'est exécutée que quand le lecteur vidéo de DeoVR sur ce PC ouvre l'outil (DeoVR lit les fiches de toute une liste : la fiche ne fait rien) et le résultat s'affiche dans un petit clip.
+- **Lecture d'avance** (`readAheadMB` = 300) : en lecture directe, le pont télécharge en plus jusqu'à 300 Mo devant la position du lecteur (octets jetés, ils restent dans le cache de Stremio) ; repart après un saut, s'arrête quand le lecteur se tait.
+- **Vignettes avec badges** (`thumbBadges`) : résolution, VR180/VR360/3D et seeders dessinés sur l'image ; barre d'avancement dans « En cours ». L'affiche d'origine n'est téléchargée qu'une fois ; vignettes de plus de 14 jours supprimées au démarrage.
+- **Tests de rejeu et d'endurance** (`tests/integration/replay.test.js`) : la séquence du 03/10 (lecture, saut sans réponse, relance de DeoVR) avec les vrais agents utilisateurs, puis 300 cycles d'affichages sans erreur 5xx ni fuite de mémoire (`/debug/perf` → `memoire`).
+### Changé
+- **`lib.js` allégé** (sans changement de comportement) : fonctions pures dans `format.js`, DNS de secours dans `dns.js`, scrape des trackers dans `scrape.js` ; `pages.js`, `tools.js` et `configfile.js` sont neufs.
+### Corrigé
+- Mode échantillon : la lecture des extraits pouvait démarrer avant la création de la session de chargement (la fiche proposait alors un flux HLS au lieu du fichier direct).
+
 ## [10.3.0] — 2026-10-04
 ### Changé (préparation de la version grand public)
 - **`formatMenu` vaut `"free"` par défaut** : le menu FLAT / 180° / 360° / fisheye / SBS de DeoVR est toujours disponible pour chaque vidéo (films et onglet Local), même quand le titre ou le nom du fichier indique le format ; le choix est retenu par vidéo. Contrepartie mesurée : l'image arrive brute (côte à côte) jusqu'au choix. `"auto"` (image juste d'emblée, sans menu quand le format est lu) et `"declare"` restent disponibles.
