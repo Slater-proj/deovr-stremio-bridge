@@ -4,6 +4,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+## [10.4.0] — 2026-10-05
+
+### En bref (version 10.4)
+- **File de téléchargement** : choisissez un film (bouton ⬇ de `/ui`, ou depuis DeoVR), il est téléchargé en entier sans lecteur ; complet, il se lit en direct (sauts instantanés). Onglet **Prêts (complets)**.
+- **Mode échantillon** (aperçu : début, milieu, fin), **onglet Local** (dossier `videos`), **onglet Outils** dans DeoVR, **garde de saut** (plus de lecteur figé), **lecture d'avance**.
+- **Pages `/settings` et `/check`** (plus besoin d'éditer le JSON), logo et icône de l'exe, titres plus lisibles, fiches plus rapides.
+- **Disque** : arrêt au dernier Go, nettoyage au démarrage, avance réduite. **`bridge-events.log`** pour comprendre un incident.
+- **À confirmer sur un vrai casque** : le garde de saut, l'onglet Outils, la file de téléchargement, le mode échantillon, la lecture d'avance. Tout est vérifié par les tests automatiques (simulations) et par le test de fumée de l'exe réel ; l'exe n'est pas signé (SmartScreen avertira au premier lancement).
+
 ### Ajouté (identité de l'exe)
 - **Logo et icône** : un casque VR blanc sur dégradé bleu-violet, avec une barre de progression verte (`packaging/windows/icon/`, généré par `scripts/make-icon.js`). L'exe porte l'icône et ses propriétés de fichier (nom, description, version) ; le logo sert aussi de favicon aux pages du pont et d'en-tête aux README.
 - **Signature de code facultative** : la CI et le workflow *Release* signent l'exe si les secrets `SIGN_PFX_BASE64` / `SIGN_PFX_PASSWORD` existent (voir `docs/MAINTAINING.md`). Sans certificat reconnu, SmartScreen avertira quand même.
