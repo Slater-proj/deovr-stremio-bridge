@@ -24,6 +24,8 @@ const SCHEMA = [
   { g: 'Format et affichage', key: 'thumbBadges', type: 'bool', hot: true, label: 'Badges sur les vignettes', help: 'Résolution, VR180/VR360/3D et seeders dessinés sur l\'image ; barre d\'avancement dans « En cours ».' },
   { g: 'Format et affichage', key: 'vrOnly', type: 'bool', hot: true, label: 'Seulement les films VR / 3D', help: 'Décoché : tous les films des catalogues.' },
   { g: 'Catalogues', key: 'types', type: 'multi', options: ['movie', 'series'], hot: true, label: 'Types de contenu lus', help: 'Les catalogues viennent des addons de votre compte Stremio.' },
+  { g: 'Catalogues', key: 'itemsPerTab', type: 'int', min: 10, max: 300, hot: true, label: 'Films par onglet', help: 'DeoVR charge la fiche de chaque film à l\'affichage : une liste plus courte s\'ouvre plus vite (les films les mieux classés sont en tête).' },
+  { g: 'Catalogues', key: 'prefetchFiches', type: 'int', min: 0, max: 40, hot: true, label: 'Fiches préparées à l\'avance (par onglet)', help: 'Les premières fiches des 3 premiers onglets sont préparées en arrière-plan quand la bibliothèque s\'affiche. 0 = désactivé.' },
   { g: 'Catalogues', key: 'maxTabs', type: 'int', min: 1, max: 60, hot: true, label: 'Nombre maximum d\'onglets', help: 'Un onglet par catalogue.' },
   { g: 'Catalogues', key: 'catalogInclude', type: 'text', regex: true, hot: true, label: 'Catalogues à garder (expression)', help: 'Vide = tous. Exemple : VR|180' },
   { g: 'Catalogues', key: 'catalogExclude', type: 'text', regex: true, hot: true, label: 'Catalogues à ignorer (expression)', help: 'Exemple : TMDB|Séries' },

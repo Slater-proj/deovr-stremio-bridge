@@ -21,7 +21,7 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND
 | `genreTabs` | `false` | un onglet par genre pour les catalogues qui en proposent |
 | `maxGenresPerCatalog` | `6` | plafond d'onglets par catalogue à genres |
 | `maxTabs` | `20` | nombre maximum d'onglets dans DeoVR |
-| `itemsPerTab` | `150` | films par onglet |
+| `itemsPerTab` | `80` | films par onglet |
 | `pagesPerTab` | `2` | pages Stremio (skip) chargées par onglet |
 | `streamsTimeoutMs` | `12000` | attente max des addons de flux avant de répondre à DeoVR |
 | `types` | `['movie']` | types Stremio affichés |
@@ -44,6 +44,7 @@ Certaines clés peuvent aussi venir de variables d'environnement : `PORT`, `BIND
 | `sampleMinutes` | `+file.sampleMinutes > 0 ? +file.sampleMinutes : 2` | durée de chaque extrait, en minutes |
 | `queueHours` | `'') ? file.queueHours : ''` | plage horaire des téléchargements en file (ex. "01:00-08:00", minuit franchi accepté) ; vide = à toute heure. Hors plage, la file attend (les films regardés ne sont pas concernés) |
 | `cleanTitles` | `true` | titres lisibles dans les listes de DeoVR : retire les listes de mots-clés entre crochets (genres, durée, « Oculus Rift / Vive »…) que certains addons collent au titre ; la résolution et le format restent sur la vignette |
+| `prefetchFiches` | `12` | après l'envoi de la bibliothèque : fiches préparées en arrière-plan pour les N premiers films de chacun des 3 premiers onglets (DeoVR les demande toutes d'un coup) ; 0 = désactivé |
 | `readAheadMB` | `300` | lecture directe : le pont télécharge en plus jusqu'à N Mo DEVANT la position du lecteur (octets jetés, ils restent dans le cache de Stremio) pour que la lecture ne rattrape pas le téléchargement ; 0 = désactivé |
 | `thumbBadges` | `true` | badges dessinés sur les vignettes (résolution, VR180/VR360/3D, seeders ; barre d'avancement dans « En cours ») : lisibles malgré l'absence d'emoji dans les titres de DeoVR |
 | `toolsTab` | `true` | onglet « Outils » dans DeoVR (rapport, pause, nettoyage, état, mode échantillon) : actions lancées depuis la VR, exécutées quand le lecteur vidéo de DeoVR sur ce PC les ouvre |

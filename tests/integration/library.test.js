@@ -191,3 +191,20 @@ test('vignettes : badge (résolution, format, seeders) et barre d\'avancement de
   assert.ok(!a.equals(b) && !a.equals(c) && !b.equals(c), 'trois images différentes (sans, badge+avancement, avancement seul)');
   for (const [i, buf] of [b, c].entries()) { const f = path.join(os.tmpdir(), `thumb-ov-${i}.jpg`); fs.writeFileSync(f, buf); assert.equal(cp.spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', f], { encoding: 'utf8' }).stdout.trim(), '960,540'); }
 });
+
+test('préchargement : après l\'envoi de la bibliothèque, les fiches des premiers films sont préparées en arrière-plan ; la demande de DeoVR est alors immédiate ; rien n\'est téléchargé', async () => {
+  const b = await startBridge(mocks, { prefetchFiches: 5 });
+  try {
+    const lib = await b.json('/deovr', { headers: { 'user-agent': 'Mozilla/5.0 Chromium/40 HMD/0 HMDN/pimax dream air [DEO15.9.3915]/steam' } });
+    await b.waitFor(async () => (b.out().match(/fiche envoyée/g) || []).length >= 3, 15000, 200);   // aucune demande de fiche de DeoVR : tout vient du préchargement
+    const it = scene(lib, 'Top VR').list[0], t0 = Date.now(), v = await b.json(new URL(it.video_url).pathname);
+    assert.ok(v.encodings && Date.now() - t0 < 300, `fiche servie du cache (${Date.now() - t0} ms)`);
+    assert.equal(mocks.created.size, 0, 'aucun torrent démarré');
+  } finally { await b.stop(); }
+});
+
+test('prefetchFiches 0 : aucun préchargement ; itemsPerTab par défaut : 80', async () => {
+  assert.equal((await bridge.json('/debug')).config.itemsPerTab, 80);
+  const b = await startBridge(mocks, { prefetchFiches: 0 });
+  try { await b.json('/deovr'); await new Promise(r => setTimeout(r, 1500)); assert.ok(!/fiche envoyée/.test(b.out()), 'aucune fiche préparée sans demande'); } finally { await b.stop(); }
+});

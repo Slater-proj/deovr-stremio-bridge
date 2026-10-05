@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 ## [Non publié]
 
 ### Changé (confort et vitesse dans le casque)
+- **80 films par onglet au lieu de 150** (`itemsPerTab`, réglable dans `/settings`) : DeoVR charge la fiche de chacun à l'affichage de la liste ; les films sont triés par santé, les mieux classés restent en tête.
+- **Fiches préchargées** (`prefetchFiches` = 12) : après l'envoi de la bibliothèque, le pont prépare en arrière-plan les fiches des 12 premiers films de chacun des 3 premiers onglets (priorité basse : une vraie demande de DeoVR passe devant et rejoint le calcul en cours). Quand DeoVR les demande, elles sont déjà là. Rien n'est téléchargé. `0` désactive.
 - **Titres lisibles** (`cleanTitles`, activé) : les listes de mots-clés que certains addons collent au titre (genres, « [2026-09-25, …, », « [Oculus Rift / Vive] ») sont retirées de la liste et de la fiche ; le studio et le titre restent. La résolution et le format restent sur la vignette (badge).
 - **Badge de vignette avec la durée** (`8K VR180 54min S30+`).
 - **Fiches vidéo plus rapides** : mesure sur le 5e test (p50 = 2,5 s, p90 = 5 s pour une fiche, alors que DeoVR abandonne vers 10 s) : l'attente du scrape UDP par fiche (2,5 s) se cumulait avec la file d'attente de 6 fiches en parallèle (2 à 3 paliers de 2,5 s pour une page de 21 fiches). Attente ramenée à 0,8 s et `jsonConcurrency` de 6 à 10.

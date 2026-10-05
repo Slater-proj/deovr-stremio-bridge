@@ -27,7 +27,7 @@ const cfg = {
   genreTabs: file.genreTabs ?? false,
   maxGenresPerCatalog: file.maxGenresPerCatalog || 6,   // plafond d'onglets par catalogue à genres
   maxTabs: file.maxTabs || 20,
-  itemsPerTab: file.itemsPerTab || 150,
+  itemsPerTab: file.itemsPerTab || 80,
   pagesPerTab: file.pagesPerTab || 2,               // pages Stremio (skip) chargées par onglet
   streamsTimeoutMs: file.streamsTimeoutMs || 12000, // attente max des addons de flux avant de répondre à DeoVR
   types: file.types || ['movie'],
@@ -50,6 +50,7 @@ const cfg = {
   sampleMinutes: +file.sampleMinutes > 0 ? +file.sampleMinutes : 2,   // durée de chaque extrait, en minutes
   queueHours: /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(file.queueHours || '') ? file.queueHours : '',   // plage horaire des téléchargements en file (ex. "01:00-08:00", minuit franchi accepté) ; vide = à toute heure. Hors plage, la file attend (les films regardés ne sont pas concernés)
   cleanTitles: file.cleanTitles ?? true,           // titres lisibles dans les listes de DeoVR : retire les listes de mots-clés entre crochets (genres, durée, « Oculus Rift / Vive »…) que certains addons collent au titre ; la résolution et le format restent sur la vignette
+  prefetchFiches: file.prefetchFiches ?? 12,       // après l'envoi de la bibliothèque : fiches préparées en arrière-plan pour les N premiers films de chacun des 3 premiers onglets (DeoVR les demande toutes d'un coup) ; 0 = désactivé
   readAheadMB: file.readAheadMB ?? 300,            // lecture directe : le pont télécharge en plus jusqu'à N Mo DEVANT la position du lecteur (octets jetés, ils restent dans le cache de Stremio) pour que la lecture ne rattrape pas le téléchargement ; 0 = désactivé
   thumbBadges: file.thumbBadges ?? true,           // badges dessinés sur les vignettes (résolution, VR180/VR360/3D, seeders ; barre d'avancement dans « En cours ») : lisibles malgré l'absence d'emoji dans les titres de DeoVR
   toolsTab: file.toolsTab ?? true,                 // onglet « Outils » dans DeoVR (rapport, pause, nettoyage, état, mode échantillon) : actions lancées depuis la VR, exécutées quand le lecteur vidéo de DeoVR sur ce PC les ouvre
@@ -1973,6 +1974,22 @@ function vidFor(key, fn) {   // fiche vidéo : cache 45 s des réponses valides 
   const p = fn().then(v => { if (v) { vidCache.set(key, { t: Date.now(), v }); if (vidCache.size > 2000) vidCache.clear(); } return v; });
   vidInflight.set(key, p); p.then(() => vidInflight.delete(key), () => vidInflight.delete(key)); return p;
 }
+const SPECIAL_TABS = new Set(['En cours', 'Prêts (complets)', 'Local', 'Outils', 'Test pont']);
+function prefetchFiches(lib, base, plat) {   // DeoVR demande la fiche de TOUS les films d'une liste dès qu'elle s'affiche : on prépare les premières avant, en arrière-plan (priorité basse : une vraie demande de DeoVR passe devant)
+  if (!(cfg.prefetchFiches > 0)) return 0;
+  const want = [], seenId = new Set();
+  for (const sc of (lib.scenes || []).filter(s => !SPECIAL_TABS.has(s.name)).slice(0, 3)) for (const it of sc.list.slice(0, cfg.prefetchFiches)) {
+    const m = /\/video\/([^/]+)\/(.+?)\.json$/.exec(String(it.video_url || '')); if (!m) continue;
+    const id = decodeURIComponent(m[2]); if (seenId.has(id)) continue; seenId.add(id); want.push([m[1], id]);
+  }
+  let n = 0;
+  for (const [type, id] of want) {
+    const key = `vid:${plat}:${type}:${id}:${base}`; if (vidCache.has(key) && Date.now() - vidCache.get(key).t < 45000) continue; if (jsonLimit.waiting() > 20) break;
+    n++; vidFor(key, () => jsonLimit(() => buildVideo(type, id, base, '', plat, 'prefetch'), false)).catch(() => {});
+  }
+  if (n) log('debug', `préchargement de ${n} fiche(s) des premiers onglets`);
+  return n;
+}
 function vidInvalidate(id) { libMemo.clear(); for (const k of [...vidCache.keys()]) if (k.includes(`:${id}:`)) vidCache.delete(k); }   // l'état du film a changé (prêt...) : la prochaine fiche doit être recalculée, pas servie depuis le cache de 45 s
 // ----- mémoire : le pont peut tourner des jours (démarrage automatique) : on oublie ce qui est périmé au lieu de tout garder -----
 function pruneMemory(now = Date.now()) {
@@ -2134,7 +2151,7 @@ function start(port = cfg.port) {
       if (u.pathname === '/deovr' || u.pathname === '/') {
         if (u.searchParams.get('via') === 'G') noteOpen('G', 'lien deovr:// vers la bibliothèque', req);
         if (/HMD/.test(req.headers['user-agent'] || '')) { seen.deovr = { t: new Date().toISOString().slice(11, 19), version: (/\[(DEO[^\]]+)\]/.exec(req.headers['user-agent'] || '') || [])[1] || '' }; const nw = Date.now(); if (nw - relaunch.lastHmd < 3000) { const lp = relaunch.lastPlayer, ago = lp ? Math.round((nw - lp.fin) / 1000) : null, ev = { t: new Date().toISOString().slice(11, 19), derniereRequeteLecteur_ilYa_s: ago, chemin: lp && lp.path, range: lp && lp.range, duree_ms: lp && lp.ms, fermeeParLeLecteur: lp && lp.fermeeParLeLecteur }; ev.systeme = { ramLibre_Go: +(os.freemem() / 1e9).toFixed(1), ramPont_Mo: Math.round(process.memoryUsage().rss / 1e6), disqueLibre_Go: disk.freeGB, filmsActifs: [...dls.values()].filter(x => x.active).length, deovr: (/\[(DEO[^\]]+)\]/.exec(req.headers['user-agent'] || '') || [])[1] || null }; relaunch.list.push(ev); evt('relance-deovr', ev); if (relaunch.list.length > 20) relaunch.list.shift(); log('warn', `${ago !== null && ago <= 20 ? 'DeoVR s\'est probablement relancé juste après une lecture' : 'DeoVR (re)démarré (ou lien deovr:// ouvert)'} (2 demandes /deovr en ${((nw - relaunch.lastHmd) / 1000).toFixed(1)} s) — dernière demande du lecteur vidéo il y a ${ago ?? '?'} s : ${lp ? `${lp.path} ${lp.range || ''} -> ${lp.status} après ${lp.ms} ms${lp.fermeeParLeLecteur ? ' (fermée par le lecteur)' : ''}` : 'aucune'}`); } relaunch.lastHmd = nw; }
-        rootHits.push({ t: new Date().toISOString().slice(11, 19), chemin: u.pathname, accept: String(req.headers.accept || '-').slice(0, 60), ua: String(req.headers['user-agent'] || '').slice(0, 50), reponse: 'bibliothèque JSON' }); if (rootHits.length > 30) rootHits.shift(); log('info', `bibliothèque demandée (${u.pathname}) par ${String(req.headers['user-agent'] || '?').slice(0, 40)} Accept=${String(req.headers.accept || '-').slice(0, 40)}`); return send(res, 200, await libFor(base, u.searchParams.get('q'))); }
+        rootHits.push({ t: new Date().toISOString().slice(11, 19), chemin: u.pathname, accept: String(req.headers.accept || '-').slice(0, 60), ua: String(req.headers['user-agent'] || '').slice(0, 50), reponse: 'bibliothèque JSON' }); if (rootHits.length > 30) rootHits.shift(); log('info', `bibliothèque demandée (${u.pathname}) par ${String(req.headers['user-agent'] || '?').slice(0, 40)} Accept=${String(req.headers.accept || '-').slice(0, 40)}`); { const lib = await libFor(base, u.searchParams.get('q')); send(res, 200, lib); if (!u.searchParams.get('q')) prefetchFiches(lib, base, platformOf(req)); return; } }
       const lvm = u.pathname.match(/^\/live\/([0-9a-f]{40})\/(-?\d+)\/((?:real\/)?[\w.-]+)$/i);
       if (lvm) { if (!ffmpegOk) { res.writeHead(501); return res.end(); } const hh = lvm[1].toLowerCase(); return serveLive(req, res, hh, lvm[2], lvm[3]); }
       if (u.pathname === '/debug/live') return send(res, 200, liveData());
@@ -2197,4 +2214,4 @@ async function selfCheck() {
   catch {}   // injoignable : stremioPing() le signale une seule fois (message « Stremio n'est pas lancé »)
   if (!fs.existsSync(path.join(RES_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier resources/test incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { cleanTitle, inQueueHours, seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { prefetchFiches, cleanTitle, inQueueHours, seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
