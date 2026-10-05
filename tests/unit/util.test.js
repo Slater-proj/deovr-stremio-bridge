@@ -91,3 +91,14 @@ test('plage horaire de la file de téléchargement : vide = toujours ; plage de 
     L.cfg.queueHours = '09:00-17:00'; assert.deepEqual([at(9, 0), at(12, 0), at(17, 0), at(8, 59)].map(d => L.inQueueHours(d)), [true, true, false, false]);
   } finally { L.cfg.queueHours = was; }
 });
+
+test('titres lisibles dans DeoVR : listes de mots-clés et d\'appareils retirées, studio et titre gardés', () => {
+  const c = L.cleanTitle;
+  assert.equal(c('[Studio A] Un titre - Sous-titre (99352) [2026-09-25, Mot1, Mot2, Mot3, Mot4, Mot5,'), '[Studio A] Un titre - Sous-titre (99352)', 'groupe tronqué par l\'addon');
+  assert.equal(c('[Studio B / Site.com] Autre titre (Episode 1) [2026 г., A, B, C, VR, 60 FPS, 180°, 6K, 3072p] [Oculus Rift / Vive]'), '[Studio B / Site.com] Autre titre (Episode 1)');
+  assert.equal(c('Avatar (2009)'), 'Avatar (2009)'); assert.equal(c('Film 1 8K 3840p'), 'Film 1 8K 3840p');
+  assert.equal(c('Titre [4K] suite'), 'Titre [4K] suite', 'un court groupe sans virgules reste');
+  assert.equal(c('[Studio seul]'), '[Studio seul]', 'le tout premier groupe (le studio) n\'est jamais retiré');
+  assert.equal(c('[a, b, c, d]'), '[a, b, c, d]', 'jamais un titre vidé');
+  assert.equal(c(''), ''); assert.equal(c(null), '');
+});

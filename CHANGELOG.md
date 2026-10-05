@@ -4,6 +4,12 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Changé (confort et vitesse dans le casque)
+- **Titres lisibles** (`cleanTitles`, activé) : les listes de mots-clés que certains addons collent au titre (genres, « [2026-09-25, …, », « [Oculus Rift / Vive] ») sont retirées de la liste et de la fiche ; le studio et le titre restent. La résolution et le format restent sur la vignette (badge).
+- **Badge de vignette avec la durée** (`8K VR180 54min S30+`).
+- **Fiches vidéo plus rapides** : mesure sur le 5e test (p50 = 2,5 s, p90 = 5 s pour une fiche, alors que DeoVR abandonne vers 10 s) : l'attente du scrape UDP par fiche (2,5 s) se cumulait avec la file d'attente de 6 fiches en parallèle (2 à 3 paliers de 2,5 s pour une page de 21 fiches). Attente ramenée à 0,8 s et `jsonConcurrency` de 6 à 10.
+- **Écran de chargement** : quand le téléchargement est trop lent ou doit durer plus de 10 min, il propose « Quittez et lancez Outils > Télécharger en entier ».
+
 ### Ajouté
 - **Onglet « Prêts (complets) »** juste après « En cours » : les films entièrement dans le cache, lisibles aussitôt (lecture directe, sauts instantanés).
 - **Priorité au film regardé** : quand le lecteur lit un film, les téléchargements en file qui ne sont pas regardés sont mis en attente (toute la bande passante au film regardé) et repartent d'eux-mêmes ensuite.

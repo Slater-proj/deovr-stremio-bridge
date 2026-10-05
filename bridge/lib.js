@@ -49,6 +49,7 @@ const cfg = {
   sampleCount: Math.min(12, Math.max(1, Math.round(+file.sampleCount) || 3)),   // nombre d'extraits répartis du début à la fin du film (3 = début, milieu, fin)
   sampleMinutes: +file.sampleMinutes > 0 ? +file.sampleMinutes : 2,   // durée de chaque extrait, en minutes
   queueHours: /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(file.queueHours || '') ? file.queueHours : '',   // plage horaire des téléchargements en file (ex. "01:00-08:00", minuit franchi accepté) ; vide = à toute heure. Hors plage, la file attend (les films regardés ne sont pas concernés)
+  cleanTitles: file.cleanTitles ?? true,           // titres lisibles dans les listes de DeoVR : retire les listes de mots-clés entre crochets (genres, durée, « Oculus Rift / Vive »…) que certains addons collent au titre ; la résolution et le format restent sur la vignette
   readAheadMB: file.readAheadMB ?? 300,            // lecture directe : le pont télécharge en plus jusqu'à N Mo DEVANT la position du lecteur (octets jetés, ils restent dans le cache de Stremio) pour que la lecture ne rattrape pas le téléchargement ; 0 = désactivé
   thumbBadges: file.thumbBadges ?? true,           // badges dessinés sur les vignettes (résolution, VR180/VR360/3D, seeders ; barre d'avancement dans « En cours ») : lisibles malgré l'absence d'emoji dans les titres de DeoVR
   toolsTab: file.toolsTab ?? true,                 // onglet « Outils » dans DeoVR (rapport, pause, nettoyage, état, mode échantillon) : actions lancées depuis la VR, exécutées quand le lecteur vidéo de DeoVR sur ce PC les ouvre
@@ -60,7 +61,7 @@ const cfg = {
   scanAll: file.scanAll ?? false,                 // analyser aussi les films sans marqueur VR/3D dans le titre
   scanConcurrency: file.scanConcurrency ?? 6,     // films classés en parallèle (phase rapide : addons + trackers, sans démarrer de torrent)
   hostConcurrency: file.hostConcurrency ?? 4,     // requêtes simultanées max vers un même addon
-  jsonConcurrency: file.jsonConcurrency ?? 6,     // fiches vidéo calculées en parallèle (DeoVR les demande toutes d'un coup)
+  jsonConcurrency: file.jsonConcurrency ?? 10,     // fiches vidéo calculées en parallèle (DeoVR les demande toutes d'un coup)
   scrapeTrackers: file.scrapeTrackers || (env.SCRAPE_TRACKERS ? env.SCRAPE_TRACKERS.split(',') : ['tracker.opentrackr.org:1337', 'open.stealth.si:80', 'tracker.torrent.eu.org:451', 'exodus.desync.com:6969', 'open.demonii.com:1337']),   // trackers UDP interrogés (nombre de seeders sans démarrer de torrent)
   sortByHealth: file.sortByHealth ?? true,        // films sains (vert/orange) en premier dans les listes
   uiPageSize: file.uiPageSize || 48,              // cartes par page sur /ui
@@ -406,7 +407,8 @@ const seedBucket = n => (n >= 100 ? 'S100+' : n >= 30 ? 'S30+' : n >= 10 ? 'S10+
 function badgeText(m) {   // « 8K VR180 S10+ » : ce que le titre ne dit pas assez lisiblement
   try {
     const h = filmHealth.get(m.id), res = resLabel((h && h.res) || detectRes(m.name || '')), f = fmtLabel('', formatOf(m, '')), t = tagInfo(m), sm = t && /^S(\d+)$/.exec(t.label);
-    return [res, f, sm ? seedBucket(+sm[1]) : t && t.label === 'HTTP' ? 'HTTP' : ''].filter(Boolean).join(' ');
+    const rt = parseRuntime(m.runtime);
+    return [res, f, rt >= 300 ? `${Math.round(rt / 60)}min` : '', sm ? seedBucket(+sm[1]) : t && t.label === 'HTTP' ? 'HTTP' : ''].filter(Boolean).join(' ');
   } catch { return ''; }
 }
 async function makeThumb(url, ov = {}) {
@@ -432,9 +434,16 @@ async function makeThumb(url, ov = {}) {
   thumbBusy.set(f, p); p.then(() => thumbBusy.delete(f), () => thumbBusy.delete(f));
   return p;
 }
+function cleanTitle(name) {   // « [Studio] Titre (99352) [2026-09-25, a, b, c, d, …, » -> « [Studio] Titre (99352) »
+  const raw = String(name == null ? '' : name).trim(); if (!cfg.cleanTitles || !raw) return raw;
+  let t = raw.replace(/\s*\[[^\]]*\]/g, (m, off) => (off > 0 && (/,[^,]*,/.test(m) || /\b(oculus|vive|rift|quest|gear\s?vr|psvr)\b/i.test(m)) ? '' : m));   // groupes de mots-clés ou d'appareils (jamais le tout premier groupe : le studio)
+  t = t.replace(/\s*\[[^\]]*$/, m => (/,[^,]*,/.test(m) ? '' : m));   // groupe coupé par l'addon (titre tronqué) et rempli de mots-clés
+  t = t.replace(/\s{2,}/g, ' ').replace(/[\s,;:–-]+$/, '').trim();
+  return t || raw;
+}
 function metaToItem(m, base) {
   return {
-    title: healthTag(m) + (m.name || m.id),
+    title: healthTag(m) + cleanTitle(m.name || m.id),
     videoLength: parseRuntime(m.runtime),
     thumbnailUrl: thumbUrl(base, m.background && /^https?:/i.test(m.background) ? m.background : m.poster, cfg.thumbBadges ? { badge: badgeText(m) } : null),
     video_url: `${base}/video/${m.type || 'movie'}/${encodeURIComponent(m.id)}.json`,
@@ -930,14 +939,14 @@ const v0title = (a, id) => (a.meta && a.meta.name) || id;
 const hashFilm = new Map();   // hash -> id du film
 async function buildVideo(type, id, base, reqHost, platform, ua) {
   // La fiche vidéo ne démarre RIEN : addons (HTTP) + scrape UDP des trackers seulement. Le téléchargement commence au clic (quand le lecteur demande le flux).
-  const a = await analyzeVideo(type, id, base, reqHost, { platform, prio: true, streamsMs: Math.min(cfg.streamsTimeoutMs, cfg.jsonDeadlineMs - 1500), scrapeMs: 2500 });
+  const a = await analyzeVideo(type, id, base, reqHost, { platform, prio: true, streamsMs: Math.min(cfg.streamsTimeoutMs, cfg.jsonDeadlineMs - 1500), scrapeMs: 800 });
   if (!a.best && a.incomplete) { const e = new Error('addons pas encore prêts'); e.incomplete = true; throw e; }
   recordHealth(id, a);
   if (!a.best || !a.sources.length) return null;
   const okFirst = a.sources.filter(s => s.health !== 0 && s.health !== 1).sort((x, y) => y.resolution - x.resolution);
   const weak = a.sources.filter(s => s.health === 0 || s.health === 1).sort((x, y) => y.resolution - x.resolution);
   const ordered = [...okFirst, ...weak];
-  const name = a.meta.name || id, poster = a.meta.background || a.meta.poster || '', runtime = parseRuntime(a.meta.runtime);
+  const name = cleanTitle(a.meta.name || id), poster = a.meta.background || a.meta.poster || '', runtime = parseRuntime(a.meta.runtime);
   const liveOk = ffmpegOk && cfg.loadingScreen !== 'off';
   { const t0 = ordered.find(o => o.kind === 'torrent'); if (t0) bestKey.set(id, `${t0.raw.infoHash.toLowerCase()}:${Number.isInteger(t0.raw.fileIdx) ? t0.raw.fileIdx : -1}`); }
   for (const o of ordered) if (o.kind === 'torrent') {
@@ -1582,6 +1591,7 @@ function liveProgressText(s, i = 0) {   // lignes COURTES (≤ 30 caractères) :
   const lines = ['CHARGEMENT DU FILM', ttl, '', `Étape ${L.step}/4`, L.stepTxt, '', `Pairs ${D.peers} · Reçu ${(L.got / 1e6).toFixed(0)} Mo`, `Débit ${mbs(L.sp)}${L.need ? ' / besoin ' + mbs(L.need) : ''}`,
     `Tampon ${Math.round(s.producedSec || 0)} s sur ${L.T} s${L.eta != null ? ' · reste ~' + L.eta + ' s' : ''}`, ''];
   if (L.problem) lines.push(...wrapTxt(L.problem, VRW)); else lines.push(`Attente ${Math.max(el, tot)} s (30 à 60 s : normal)`);
+  if ((L.problem || (L.eta != null && L.eta > 600)) && cfg.toolsTab) lines.push("", "Trop lent ? Quittez et lancez", "Outils > Télécharger en entier.");   // le téléchargement complet se prépare sans vous
   return lines;
 }
 function renderLoader(s, i) {   // un segment de 4 s (image fixe + barre de progression + texte), dans la disposition du film
@@ -2187,4 +2197,4 @@ async function selfCheck() {
   catch {}   // injoignable : stremioPing() le signale une seule fois (message « Stremio n'est pas lancé »)
   if (!fs.existsSync(path.join(RES_DIR, 'test', 'test-2d.mp4'))) log('warn', 'dossier resources/test incomplet : les vidéos de test ne seront pas lisibles');
 }
-module.exports = { inQueueHours, seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
+module.exports = { cleanTitle, inQueueHours, seedBucket, healthChecks, toolActions, textClip, cleanOv, badgeText, makeThumb, samplePlan, addHave, haveText, localFormat, localDeclare, cleanTemp, tmpUsage, DATA_DIR, APP_DIR, RES_DIR, PATHS, configError, auth, VERSION_FULL, VERSION_INFO, parseRuntime, vrForce, vrWhy, applyVR, bufferTarget, waitPlan, liveGeom, tagInfo, healthTag, clickDead, seedMetas, pruneMemory, cache, hostAllowed, torrentQuery, thumbUrl, wrapTxt, b64u, filmCats, catalogMetas, VERSION, dls, bilans, dlData, dlState, dnsStats, seedInfo, udpScrape, scrapeStats, perfData, uiPage, catalogScenes, scanLocal, localVideo, probeContainer, selfCheck, reqLog, filmHealth, LEVELS, testVideo, statusData, torrentStats, healthMemo, sniff, nodeGet, causeOf, cfg, log, logBuf, redact, getAddons, listCatalogs, catalogExtra, fetchCatalog, buildLibrary, analyzeVideo, buildVideo, catalogList, supports, detectFormat, detectRes, VR_RE, start };
