@@ -36,6 +36,9 @@ jobs:
           if (-not $f -or -not (Test-Path (Join-Path $f.DirectoryName 'ffprobe.exe'))) { throw "ffmpeg.exe / ffprobe.exe introuvables" }
           "FFMPEG_DIR=$($f.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Exe portable
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
         run: node scripts/build-exe.js --ffmpeg-dir "$FFMPEG_DIR"
       - name: Test de fumée de l'exe (release puis debug)
         shell: pwsh

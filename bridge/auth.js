@@ -67,7 +67,7 @@ module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onCh
   const isLocal = req => LOOPBACK.has(req.socket.remoteAddress || '') && hostOk(req.headers.host);
   const page = (res, code, body, extra = {}) => {
     res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-frame-options': 'DENY', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'", ...extra });
-    res.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Connexion Stremio · Pont DeoVR</title>
+    res.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="/favicon.ico"><title>Connexion Stremio · Pont DeoVR</title>
 <style>body{font:16px/1.5 system-ui,Segoe UI,sans-serif;background:#10151c;color:#e8eef5;margin:0;display:grid;place-items:center;min-height:100vh}main{width:min(440px,92vw);background:#1a222d;border:1px solid #2b3747;border-radius:14px;padding:28px}h1{font-size:1.25rem;margin:0 0 6px}p{color:#aebccd;margin:.4em 0}label{display:block;margin:14px 0 4px;font-size:.9rem;color:#aebccd}input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid #38485c;background:#0e131a;color:#fff;font-size:1rem}button{margin-top:18px;width:100%;padding:11px;border:0;border-radius:8px;background:#3b82f6;color:#fff;font-size:1rem;cursor:pointer}button.sec{background:#2b3747}.ok{color:#5fd38d}.err{color:#ff8a80}small{color:#7f90a5;display:block;margin-top:14px}</style><main>${body}</main></html>`);
   };
   const form = (msg = '') => `<h1>Connexion à Stremio</h1><p>À faire une seule fois. Le mot de passe sert uniquement à obtenir une clé de session ; <b>il n'est pas enregistré</b>. La clé est ${secrets.backend() === 'dpapi' ? 'chiffrée avec votre compte Windows' : 'enregistrée sans chiffrement (système hors Windows)'}.</p>${msg}
@@ -91,7 +91,7 @@ module.exports = function createAuth({ cfg, log, post, dataDir, configFile, onCh
     if (fails.length >= 5) return page(res, 429, form('<p class="err">Trop d\'essais : patientez une minute.</p>'));
     try { await signIn(String(f.get('email') || '').trim(), String(f.get('password') || '')); }
     catch (e) { fails.push(now); log('warn', 'connexion Stremio échouée : ' + e.message); return page(res, 200, form(`<p class="err">${esc(e.code === 'LOGIN_REFUSED' ? e.message : 'Connexion impossible (' + e.message + ')')}</p>`)); }
-    res.writeHead(303, { location: '/setup?ok=1', 'cache-control': 'no-store' }); res.end();
+    res.writeHead(303, { location: '/settings?bienvenue=1', 'cache-control': 'no-store' }); res.end();
   }
   return { key, invalid, signIn, signOut, status, check, handle, needLoginError, setupToken: token, maskEmail };
 };

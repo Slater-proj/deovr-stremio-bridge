@@ -4,6 +4,12 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Les
 
 ## [Non publié]
 
+### Ajouté (identité de l'exe)
+- **Logo et icône** : un casque VR blanc sur dégradé bleu-violet, avec une barre de progression verte (`packaging/windows/icon/`, généré par `scripts/make-icon.js`). L'exe porte l'icône et ses propriétés de fichier (nom, description, version) ; le logo sert aussi de favicon aux pages du pont et d'en-tête aux README.
+- **Signature de code facultative** : la CI et le workflow *Release* signent l'exe si les secrets `SIGN_PFX_BASE64` / `SIGN_PFX_PASSWORD` existent (voir `docs/MAINTAINING.md`). Sans certificat reconnu, SmartScreen avertira quand même.
+### Changé
+- **Après la première connexion à Stremio**, la page s'ouvre directement sur les **réglages** (`/settings`), avec les liens utiles (bibliothèque web, file de téléchargement, vérifications, suivi, compte) et un rappel de l'adresse à taper dans DeoVR.
+
 ### Changé (confort et vitesse dans le casque)
 - **80 films par onglet au lieu de 150** (`itemsPerTab`, réglable dans `/settings`) : DeoVR charge la fiche de chacun à l'affichage de la liste ; les films sont triés par santé, les mieux classés restent en tête.
 - **Fiches préchargées** (`prefetchFiches` = 12) : après l'envoi de la bibliothèque, le pont prépare en arrière-plan les fiches des 12 premiers films de chacun des 3 premiers onglets (priorité basse : une vraie demande de DeoVR passe devant et rejoint le calcul en cours). Quand DeoVR les demande, elles sont déjà là. Rien n'est téléchargé. `0` désactive.

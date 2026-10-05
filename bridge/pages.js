@@ -84,12 +84,12 @@ input[type=text],input[type=number],select,textarea{width:100%;box-sizing:border
 button{margin-top:22px;padding:11px 22px;border:0;border-radius:8px;background:#3b82f6;color:#fff;font-size:1rem;cursor:pointer}a{color:#8ab4ff}.ok{color:#5fd38d}.err{color:#ff8a80}.warn{color:#ffd166}
 table{border-collapse:collapse;width:100%}td{padding:8px 10px;border-bottom:1px solid #1b2430;vertical-align:top}.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px}.d-ok{background:#2fbf71}.d-warn{background:#f5a623}.d-fail{background:#e5484d}.d-info{background:#5b8def}
 @media(max-width:640px){.f{grid-template-columns:1fr}}`;
-const shell = (title, body) => `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · Pont DeoVR</title><style>${CSS}</style><main>${body}</main></html>`;
+const shell = (title, body) => `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="/favicon.ico"><title>${esc(title)} · Pont DeoVR</title><style>${CSS}</style><main>${body}</main></html>`;
 
 function create({ cfg, configFile, save, log, applyHot, checks, queue }) {
   const token = crypto.randomBytes(24).toString('hex'), fails = [];
   const page = (res, code, body, title = 'Réglages') => { res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-frame-options': 'DENY', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'" }); res.end(shell(title, body)); };
-  const nav = '<p><a href="/ui">Bibliothèque web</a> · <a href="/check">Vérifications</a> · <a href="/status">Suivi</a> · <a href="/setup">Compte Stremio</a></p>';
+  const nav = '<p><a href="/ui">Bibliothèque web</a> · <a href="/queue">File de téléchargement</a> · <a href="/check">Vérifications</a> · <a href="/status">Suivi</a> · <a href="/setup">Compte Stremio</a></p>';
 
   function field(f) {
     const v = cfg[f.key], name = 'f_' + f.key, restart = f.hot ? '' : ' <span class="r">(après redémarrage)</span>';
@@ -109,7 +109,7 @@ function create({ cfg, configFile, save, log, applyHot, checks, queue }) {
   }
   async function handleSettings(req, res) {
     if (!isLocal(req)) return page(res, 403, `<h1>Accès réservé à ce PC</h1><p>Ouvrez <b>http://localhost:${cfg.port}/settings</b> dans un navigateur sur le PC où tourne le pont.</p>`);
-    if (req.method === 'GET') return page(res, 200, form());
+    if (req.method === 'GET') { let welcome = false; try { welcome = new URL(req.url, 'http://x').searchParams.has('bienvenue'); } catch {} return page(res, 200, form(welcome ? '<p class="ok">Connexion à Stremio réussie.</p><p>Voici les réglages du pont. Dans DeoVR, tapez <b>http://localhost:' + cfg.port + '</b> : onglets <b>En cours</b>, <b>Prêts</b>, <b>Outils</b>… Les liens utiles (bibliothèque web, file de téléchargement, vérifications, suivi) sont juste en dessous.</p>' : '')); }
     if (req.method !== 'POST') return page(res, 405, '<h1>Méthode non autorisée</h1>');
     const origin = req.headers.origin; if (origin && origin !== 'null') { let ok = false; try { ok = hostOk(new URL(origin).host); } catch {} if (!ok) return page(res, 403, '<h1>Origine refusée</h1>'); }
     let body; try { body = await new Promise((ok, no) => { let b = ''; req.on('data', c => { b += c; if (b.length > 65536) { no(new Error('trop gros')); req.destroy(); } }); req.on('end', () => ok(b)); req.on('error', no); }); } catch { return page(res, 400, '<h1>Requête invalide</h1>'); }

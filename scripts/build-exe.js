@@ -52,6 +52,14 @@ if (simulate) {
   run('npx', ['--yes', POSTJECT, exe, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', FUSE, ...(process.platform === 'darwin' ? ['--macho-segment-name', 'NODE_SEA'] : [])]);
 }
 console.log(`méthode d'injection : ${simulate ? 'SIMULATION (lanceur sh)' : hasBuildSea ? 'node --build-sea' : 'postject'} (Node ${process.version})`);
+// icône + informations de version (propriétés du fichier), puis signature si un certificat est fourni (SIGN_PFX_BASE64 / SIGN_PFX_FILE) ; l'exe est ensuite relancé (--version) pour s'assurer que rien n'est cassé
+if (isWin && !simulate && !args.includes('--no-brand')) {
+  const wx = require('./lib/winexe'), b = wx.brand(exe, { root, version, cacheDir: path.join(dist, 'tools') });
+  console.log(b.ok ? 'icône et informations de version : OK' : `ATTENTION : exe SANS icône ni informations de version (${b.why})`);
+  const sg = wx.sign(exe);
+  console.log(sg.skipped ? 'signature de code : non demandée (aucun certificat fourni : SmartScreen avertira)' : sg.ok ? `signature de code : ${sg.info}` : `ATTENTION : signature échouée (${sg.why})`);
+  if (process.env.REQUIRE_SIGNATURE === '1' && !sg.ok) throw new Error('signature exigée (REQUIRE_SIGNATURE=1) mais non réalisée');
+}
 const v = cp.spawnSync(exe, ['--version'], { encoding: 'utf8', timeout: 30000 });
 if (v.status !== 0 || !v.stdout.includes(version)) throw new Error(`l'exécutable fabriqué ne démarre pas correctement (--version) : ${v.stdout} ${v.stderr}`);
 console.log(`exécutable OK : ${path.basename(exe)} ${v.stdout.trim()} (${(fs.statSync(exe).size / 1e6).toFixed(0)} Mo)`);

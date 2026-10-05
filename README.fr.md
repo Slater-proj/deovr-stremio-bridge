@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="packaging/windows/icon/logo.png" alt="" width="96">
+
 # Pont DeoVR ⇄ Stremio
 
 **Parcourez votre bibliothèque Stremio depuis DeoVR et lancez un film en un clic.**

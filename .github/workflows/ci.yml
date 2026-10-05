@@ -44,6 +44,9 @@ jobs:
         shell: bash
         run: echo "BUILD_SUFFIX=-dev.${{ github.run_number }}.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - name: Fabriquer l'exe portable
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}      # facultatif : certificat de signature de code (voir docs/MAINTAINING.md) ; absent = exe non signé
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
         run: node scripts/build-exe.js --ffmpeg-dir "$env:FFMPEG_DIR"
       - name: "Test de fumée de l'exe RELEASE (zip minimal : exe + resources + docs)"
         shell: pwsh

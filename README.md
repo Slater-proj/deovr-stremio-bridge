@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="packaging/windows/icon/logo.png" alt="" width="96">
+
 # DeoVR ⇄ Stremio Bridge
 
 **Browse your Stremio library from inside DeoVR — and start a film with one click.**

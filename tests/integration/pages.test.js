@@ -102,3 +102,24 @@ describe('/settings : jamais d\'injection de HTML', () => {
     const page = await bridge.get('/settings').then(r => r.text()); assert.ok(!page.includes('<script>alert(1)'), 'pas de balise injectée'); assert.ok(page.includes('&lt;script&gt;'), 'valeur affichée échappée');
   });
 });
+
+describe('/settings juste après la connexion', () => {
+  test('?bienvenue affiche l\'accueil avec les liens utiles', async () => {
+    const mocks = await startMocks({ film: Buffer.alloc(1024) }), bridge = await startBridge(mocks);
+    try {
+      const t = await bridge.get('/settings?bienvenue=1').then(r => r.text()); assert.match(t, /Connexion à Stremio réussie/); assert.match(t, /href="\/queue"/); assert.match(t, /href="\/check"/); assert.match(t, /Outils/);
+      assert.ok(!/Connexion à Stremio réussie/.test(await bridge.get('/settings').then(r => r.text())), 'pas de message sans le paramètre');
+    } finally { await bridge.stop(); await mocks.close(); }
+  });
+});
+
+describe('logo', () => {
+  test('/favicon.ico sert le logo (PNG) et les pages du pont le déclarent', async () => {
+    const mocks = await startMocks({ film: Buffer.alloc(1024) }), bridge = await startBridge(mocks);
+    try {
+      const r = await bridge.get('/favicon.ico'); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/png');
+      const b = Buffer.from(await r.arrayBuffer()); assert.equal(b.subarray(1, 4).toString(), 'PNG'); assert.ok(b.length > 500);
+      for (const p of ['/settings', '/check', '/ui', '/status']) assert.match(await bridge.get(p).then(x => x.text()), /rel="?icon"? href="\/favicon\.ico"/, p);
+    } finally { await bridge.stop(); await mocks.close(); }
+  });
+});

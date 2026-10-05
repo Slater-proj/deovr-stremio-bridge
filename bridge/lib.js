@@ -1822,7 +1822,7 @@ function statusData() {   // page /status : films lancés par un clic (actifs et
   return Promise.resolve(dlSorted().map(D => { const st = dlState(D); return { film: D.title, etat: st.label, actif: D.active ? 'oui' : 'non', pairs: D.peers, debit_MoS: +((D.speed || 0) / 1e6).toFixed(2), necessaire_MoS: D.need ? +(D.need / 1e6).toFixed(2) : null, ratio: D.need && D.speed ? +(D.speed / D.need).toFixed(2) : null,
     recu_Mo: Math.round(Math.max(D.readBytes, D.netBytes) / 1e6), progression: Math.round(100 * (D.progress || 0)) + ' %', tailleFichier_Mo: D.size ? Math.round(D.size / 1e6) : null, tampon_s: D.live ? Math.round(D.live.producedSec || 0) : null, dernierLecteur_ilYa_s: Math.round((now - D.lastPlayer) / 1000), disponible: haveText(D) || null }; }));
 }
-const STATUS_HTML = `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Pont DeoVR · suivi</title>
+const STATUS_HTML = `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Pont DeoVR · suivi</title><link rel=icon href="/favicon.ico">
 <style>body{font:15px system-ui;background:#111;color:#eee;margin:16px}.c{background:#1c1c1c;border-radius:10px;padding:12px;margin:10px 0}b{color:#8cf}.g{color:#6f6}.o{color:#fa4}.r{color:#f66}td{padding:2px 12px 2px 0}</style>
 <h2>Suivi de lecture</h2><div id=o>chargement…</div><script>
 async function t(){try{const d=await (await fetch('/status.json')).json();document.getElementById('o').innerHTML=d.length?d.map(x=>{const k=x.ratio==null?'':x.ratio>=1.5?'g':x.ratio>=1?'o':'r';return '<div class=c><b>'+x.film+'</b><table>'+Object.entries(x).slice(1).map(([a,b])=>'<tr><td>'+a+'</td><td'+(a=='ratio'?' class='+k:'')+'>'+b+'</td></tr>').join('')+'</table></div>'}).join(''):'Aucune lecture récente.'}catch(e){document.getElementById('o').textContent='erreur '+e}}
@@ -1893,7 +1893,7 @@ async function uiPage(u, host) {
   const pg = []; for (let i = 0; i < pages; i++) if (i === 0 || i === pages - 1 || Math.abs(i - page) <= 2) pg.push(i); else if (pg[pg.length - 1] !== '…') pg.push('…');
   const pager = pages > 1 ? `<div class=pg>${page > 0 ? `<a href="${qs({ page: page - 1 })}">◀</a>` : ''}${pg.map(i => i === '…' ? ' … ' : i === page ? `<b>${i + 1}</b>` : `<a href="${qs({ page: i })}">${i + 1}</a>`).join('')}${page < pages - 1 ? `<a href="${qs({ page: page + 1 })}">▶</a>` : ''}</div>` : '';
   const hid = (k, v) => (v !== '' && v != null ? `<input type=hidden name=${k} value="${esc(v)}">` : '');
-  return `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Pont DeoVR · bibliothèque</title><style>${UI_CSS}</style>
+  return `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Pont DeoVR · bibliothèque</title><link rel=icon href="/favicon.ico"><style>${UI_CSS}</style>
 <table class=lay><tr><td class=side>
 <div class=logo>Pont DeoVR</div>
 <h4>Sources Stremio</h4>
@@ -2107,6 +2107,7 @@ function start(port = cfg.port) {
     res.on('close', () => recordReq({ film: hm0 ? (relayState.get(hm0[1].toLowerCase()) || {}).title : lm0 ? localTitles.get(lm0[1]) : undefined, t: new Date(t0).toISOString(), ip: rip, method: req.method, path: safePath + (u.pathname.startsWith('/torrent') ? '' : ''), range: req.headers.range || null, ua: req.headers['user-agent'] || null, status: res.statusCode, sent, ms: Date.now() - t0, finished: res.writableFinished, clientClosedEarly: !res.writableFinished, upstream: res.upstream || undefined }));
     try {
       if (u.pathname === '/setup' || u.pathname === '/setup/logout') return auth.handle(req, res, u);
+      if (u.pathname === '/favicon.ico') { const png = require('./logo'); res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? undefined : png); }
       if (u.pathname === '/settings') return pagesMod().handleSettings(req, res);
       if (u.pathname === '/queue') return pagesMod().handleQueue(req, res);
       if (u.pathname === '/check' || u.pathname === '/check.json') return pagesMod().handleCheck(req, res, u.pathname === '/check.json');

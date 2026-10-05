@@ -34,7 +34,7 @@ describe('compte Stremio', () => {
       assert.equal(mocks.api.logins.length, 0, 'aucune tentative de connexion déclenchée par les requêtes refusées');
       const bad = await post(b, '/setup', { ...good, password: 'faux' }); assert.equal(bad.status, 200); assert.match(bad.body, /refusé la connexion/);
       assert.ok(!fs.existsSync(path.join(b.dataDir, secrets.FILE)), 'rien d\'enregistré après un échec');
-      const ok = await post(b, '/setup', good); assert.equal(ok.status, 303); assert.equal(ok.location, '/setup?ok=1');
+      const ok = await post(b, '/setup', good); assert.equal(ok.status, 303); assert.equal(ok.location, '/settings?bienvenue=1', 'après la connexion : directement les réglages (les liens utiles sont en haut)');
       assert.ok(fs.existsSync(path.join(b.dataDir, secrets.FILE)), 'clé enregistrée');
       assert.ok((await sceneNames(b)).includes('Top VR'), 'les catalogues du compte apparaissent');
       assert.match(await (await b.get('/setup')).text(), /Compte connecté/);
