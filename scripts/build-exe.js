@@ -39,7 +39,8 @@ if (args.includes('--bundle-only')) { console.log(bundle); process.exit(0); }
 // 2. exécutable : binaire Node + blob SEA. Node récent : `node --build-sea` (rien à télécharger) ; sinon `postject` (outil de build épinglé, via npx).
 const exe = path.join(work, exeName), blob = path.join(work, 'sea-prep.blob'), cfgFile = path.join(work, 'sea-config.json');
 const simulate = args.includes('--simulate');   // essai hors Windows : « exe » = petit lanceur sh + bundle.js (BRIDGE_APP_DIR), pour tester l'assemblage des archives et le test de fumée
-const hasBuildSea = !args.includes('--postject') && /--build-sea/.test(cp.spawnSync(process.execPath, ['--help'], { encoding: 'utf8' }).stdout || '');
+const brandWanted = isWin && !simulate && !args.includes('--no-brand');   // icône + propriétés du fichier : exige la voie postject (habillage avant injection)
+const hasBuildSea = !brandWanted && !args.includes('--postject') && /--build-sea/.test(cp.spawnSync(process.execPath, ['--help'], { encoding: 'utf8' }).stdout || '');
 if (simulate) {
   fs.writeFileSync(exe, `#!/bin/sh\nD="$(cd "$(dirname "$0")" && pwd)"\nBRIDGE_APP_DIR="$D" exec node "$D/bundle.js" "$@"\n`); fs.chmodSync(exe, 0o755);
 } else if (hasBuildSea) {
@@ -49,14 +50,13 @@ if (simulate) {
   fs.writeFileSync(cfgFile, JSON.stringify({ main: bundle, output: blob, disableExperimentalSEAWarning: true }));
   run(process.execPath, ['--experimental-sea-config', cfgFile]);
   fs.copyFileSync(process.execPath, exe); if (!isWin) fs.chmodSync(exe, 0o755);
+  if (brandWanted) { const b = require('./lib/winexe').brand(exe, { root, version, cacheDir: path.join(dist, 'tools') }); console.log(b.ok ? 'icône et informations de version : OK (posées avant l\'injection)' : `ATTENTION : exe SANS icône ni informations de version (${b.why})`); }
   run('npx', ['--yes', POSTJECT, exe, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', FUSE, ...(process.platform === 'darwin' ? ['--macho-segment-name', 'NODE_SEA'] : [])]);
 }
 console.log(`méthode d'injection : ${simulate ? 'SIMULATION (lanceur sh)' : hasBuildSea ? 'node --build-sea' : 'postject'} (Node ${process.version})`);
-// icône + informations de version (propriétés du fichier), puis signature si un certificat est fourni (SIGN_PFX_BASE64 / SIGN_PFX_FILE) ; l'exe est ensuite relancé (--version) pour s'assurer que rien n'est cassé
-if (isWin && !simulate && !args.includes('--no-brand')) {
-  const wx = require('./lib/winexe'), b = wx.brand(exe, { root, version, cacheDir: path.join(dist, 'tools') });
-  console.log(b.ok ? 'icône et informations de version : OK' : `ATTENTION : exe SANS icône ni informations de version (${b.why})`);
-  const sg = wx.sign(exe);
+// signature de code si un certificat est fourni (SIGN_PFX_BASE64 / SIGN_PFX_FILE) ; l'exe est ensuite relancé (--version) pour s'assurer que rien n'est cassé
+if (isWin && !simulate) {
+  const sg = require('./lib/winexe').sign(exe);
   console.log(sg.skipped ? 'signature de code : non demandée (aucun certificat fourni : SmartScreen avertira)' : sg.ok ? `signature de code : ${sg.info}` : `ATTENTION : signature échouée (${sg.why})`);
   if (process.env.REQUIRE_SIGNATURE === '1' && !sg.ok) throw new Error('signature exigée (REQUIRE_SIGNATURE=1) mais non réalisée');
 }

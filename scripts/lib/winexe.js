@@ -9,7 +9,7 @@ function ensureRcedit(cacheDir) {
   const f = path.join(cacheDir, 'rcedit-x64.exe'), sha = p => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
   if (fs.existsSync(f) && sha(f) === RCEDIT.sha256) return f;
   fs.mkdirSync(cacheDir, { recursive: true });
-  const r = cp.spawnSync('curl', ['-fsSL', '--retry', '3', '-o', f, RCEDIT.url], { stdio: 'inherit' });
+  const r = cp.spawnSync('curl', ['-fsSL', '--retry', '3', '--max-time', '90', '-o', f, RCEDIT.url], { stdio: 'inherit', timeout: 300000 });
   if (r.status !== 0 || !fs.existsSync(f)) throw new Error('téléchargement de rcedit impossible');
   if (sha(f) !== RCEDIT.sha256) { fs.rmSync(f, { force: true }); throw new Error('empreinte SHA-256 de rcedit inattendue : fichier supprimé'); }
   return f;
@@ -35,16 +35,20 @@ function stripSignature(file) {
 function brand(exe, { root, version, cacheDir, description = 'Pont DeoVR - Stremio (serveur local entre DeoVR et Stremio)' }) {
   const icon = path.join(root, 'packaging', 'windows', 'icon', 'app.ico');
   if (!fs.existsSync(icon)) return { ok: false, why: 'icône absente (packaging/windows/icon/app.ico)' };
+  const bak = exe + '.bak';
   try {
+    fs.copyFileSync(exe, bak);   // sauvegarde : restaurée si l'habillage échoue
     stripSignature(exe);
     const tool = ensureRcedit(cacheDir), v4 = `${version}.0`;
     const a = [exe, '--set-icon', icon, '--set-file-version', v4, '--set-product-version', v4,
       '--set-version-string', 'ProductName', 'DeoVR-Stremio Bridge', '--set-version-string', 'FileDescription', description,
       '--set-version-string', 'OriginalFilename', path.basename(exe), '--set-version-string', 'InternalName', 'DeoVR-Stremio-Bridge',
       '--set-version-string', 'LegalCopyright', 'MIT License - https://github.com/Slater-proj/deovr-stremio-bridge'];
-    const r = cp.spawnSync(tool, a, { encoding: 'utf8' });
-    return r.status === 0 ? { ok: true } : { ok: false, why: `rcedit a échoué (code ${r.status}) ${r.stderr || ''}`.trim() };
-  } catch (e) { return { ok: false, why: e.message }; }
+    const r = cp.spawnSync(tool, a, { encoding: 'utf8', timeout: 60000 });   // délai : un blocage de rcedit ne doit jamais bloquer le build
+    if (r.status === 0) { fs.rmSync(bak, { force: true }); return { ok: true }; }
+    fs.copyFileSync(bak, exe); fs.rmSync(bak, { force: true });
+    return { ok: false, why: r.error && r.error.code === 'ETIMEDOUT' ? 'rcedit ne répond pas (60 s)' : `rcedit a échoué (code ${r.status}) ${r.stderr || ''}`.trim() };
+  } catch (e) { try { if (fs.existsSync(bak)) { fs.copyFileSync(bak, exe); fs.rmSync(bak, { force: true }); } } catch {} return { ok: false, why: e.message }; }
 }
 
 // Signature de code (Authenticode) : seulement si un certificat est fourni (SIGN_PFX_BASE64 ou SIGN_PFX_FILE, SIGN_PFX_PASSWORD) ; sinon rien, sans erreur.
@@ -59,7 +63,7 @@ function sign(exe, env = process.env) {
     const ps = `$ErrorActionPreference='Stop'; $c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList $env:SIGN_PFX_PATH, $env:SIGN_PFX_PASSWORD; ` +
       `$r = Set-AuthenticodeSignature -FilePath $env:SIGN_EXE -Certificate $c -HashAlgorithm SHA256${ts}; ` +
       `$s = Get-AuthenticodeSignature -FilePath $env:SIGN_EXE; if (-not $s.SignerCertificate) { throw 'aucune signature écrite : ' + $r.StatusMessage }; Write-Output ('signé par ' + $s.SignerCertificate.Subject + ' (état : ' + $s.Status + ')')`;
-    const r = cp.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', env: { ...env, SIGN_PFX_PATH: tmp, SIGN_EXE: exe, SIGN_PFX_PASSWORD: env.SIGN_PFX_PASSWORD || '' } });
+    const r = cp.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', timeout: 180000, env: { ...env, SIGN_PFX_PATH: tmp, SIGN_EXE: exe, SIGN_PFX_PASSWORD: env.SIGN_PFX_PASSWORD || '' } });
     return r.status === 0 ? { ok: true, info: (r.stdout || '').trim() } : { ok: false, why: ((r.stderr || '') + (r.stdout || '')).trim().slice(0, 400) };
   } catch (e) { return { ok: false, why: e.message }; }
   finally { if (b64) try { fs.rmSync(tmp, { force: true }); } catch {} }
